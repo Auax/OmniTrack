@@ -146,12 +146,6 @@ struct MediaCardView: View {
                 endPoint: .bottomTrailing
             )
 
-            Text(item.title)
-                .font(.system(size: 11, weight: .bold))
-                .multilineTextAlignment(.center)
-                .foregroundStyle(item.accentColor.opacity(0.25))
-                .padding(6)
-
             AsyncImage(url: item.posterURL) { phase in
                 switch phase {
                 case .success(let image):

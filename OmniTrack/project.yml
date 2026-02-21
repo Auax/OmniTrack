@@ -21,3 +21,9 @@ targets:
           UIApplicationSupportsMultipleScenes: false
         TMDB_API_KEY: $(TMDB_API_KEY)
         OMDB_API_KEY: $(OMDB_API_KEY)
+    dependencies:
+      - package: SDWebImageSwiftUI
+packages:
+  SDWebImageSwiftUI:
+    url: https://github.com/SDWebImage/SDWebImageSwiftUI.git
+    from: 3.0.0

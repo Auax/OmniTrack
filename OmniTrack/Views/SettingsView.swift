@@ -48,12 +48,17 @@ struct SettingsView: View {
                     Toggle(isOn: $settings.showMovies) {
                         Label("Movies", systemImage: "film")
                     }
+                    .tint(.accentColor)
+                    
                     Toggle(isOn: $settings.showTVShows) {
                         Label("TV Shows", systemImage: "tv")
                     }
+                    .tint(.accentColor)
+                    
                     Toggle(isOn: $settings.showAnime) {
                         Label("Anime", systemImage: "sparkles.tv")
                     }
+                    .tint(.accentColor)
                 } header: {
                     Text("Content")
                 } footer: {
@@ -72,12 +77,6 @@ struct SettingsView: View {
                     .tint(.secondary)
                 } header: {
                     Text("Ratings")
-                } footer: {
-                    if settings.ratingProvider == .imdb {
-                        Text("IMDb ratings are fetched via the OMDB API. You need a free API key from omdbapi.com set in Config.xcconfig.")
-                    } else {
-                        Text("Ratings will be sourced from TMDB.")
-                    }
                 }
 
                 Section {

@@ -122,11 +122,9 @@ struct LibraryView: View {
             .navigationTitle("Library")
             .searchable(text: $searchText, prompt: "Search Library")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    HStack(spacing: 16) {
-                        filterMenu
-                        sortMenu
-                    }
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    filterMenu
+                    sortMenu
                 }
             }
             .sheet(item: $selectedItem) { item in
@@ -258,19 +256,12 @@ struct LibraryView: View {
 
     private func posterImage(_ item: MediaItem) -> some View {
         ZStack {
-            // Gradient background with title fallback
+            // Gradient background fallback
             LinearGradient(
                 colors: [item.accentColor.opacity(0.4), item.accentColor.opacity(0.15)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
-
-            // Title text as background element
-            Text(item.title)
-                .font(.system(size: 12, weight: .bold))
-                .multilineTextAlignment(.center)
-                .foregroundStyle(item.accentColor.opacity(0.3))
-                .padding(6)
 
             AsyncImage(url: item.posterURL) { phase in
                 switch phase {
@@ -418,6 +409,7 @@ struct LibraryView: View {
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
 
