@@ -1,0 +1,23 @@
+name: OmniTrack
+options:
+  bundleIdPrefix: com.example
+targets:
+  OmniTrack:
+    type: application
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: .
+        excludes:
+          - project.yml
+    configFiles:
+      Debug: Config.xcconfig
+      Release: Config.xcconfig
+    info:
+      path: Info.plist
+      properties:
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        TMDB_API_KEY: $(TMDB_API_KEY)
+        OMDB_API_KEY: $(OMDB_API_KEY)

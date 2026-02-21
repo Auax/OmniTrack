@@ -1,0 +1,5 @@
+// .xcconfig files are the standard way to define environment variables in Xcode
+// Replace this with your actual TMDB API key
+TMDB_API_KEY = ea3c9b039c8438898709c5aa9c084810
+// Get a free OMDB API key from https://www.omdbapi.com/apikey.aspx
+OMDB_API_KEY = 9ece68b7
