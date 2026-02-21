@@ -101,6 +101,12 @@ struct SettingsView: View {
                         Text("TMDB")
                             .foregroundStyle(.secondary)
                     }
+                    HStack {
+                        Text("Author")
+                        Spacer()
+                        Text("Ibai Farina")
+                            .foregroundStyle(.secondary)
+                    }
                 } header: {
                     Text("About")
                 }
