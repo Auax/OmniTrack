@@ -48,21 +48,30 @@ struct SettingsView: View {
                     Toggle(isOn: $settings.showMovies) {
                         Label("Movies", systemImage: "film")
                     }
-                    .tint(.accentColor)
+                    .tint(.blue)
                     
                     Toggle(isOn: $settings.showTVShows) {
                         Label("TV Shows", systemImage: "tv")
                     }
-                    .tint(.accentColor)
+                    .tint(.blue)
                     
                     Toggle(isOn: $settings.showAnime) {
                         Label("Anime", systemImage: "sparkles.tv")
                     }
-                    .tint(.accentColor)
+                    .tint(.blue)
+                    
+                    Picker(selection: $settings.imageCacheDuration) {
+                        ForEach(ImageCacheDuration.allCases) { duration in
+                            Text(duration.rawValue)
+                                .tag(duration)
+                        }
+                    } label: {
+                        Label("Image Cache", systemImage: "photo.badge.arrow.down")
+                    }
                 } header: {
                     Text("Content")
                 } footer: {
-                    Text("Choose which types of media appear in your feed.")
+                    Text("Choose media types and how long images are saved offline.")
                 }
 
                 Section {

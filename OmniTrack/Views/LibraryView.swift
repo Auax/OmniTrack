@@ -1,4 +1,6 @@
 import SwiftUI
+import SDWebImageSwiftUI
+import SDWebImageSwiftUI
 
 struct LibraryView: View {
     @Environment(MediaService.self) private var mediaService
@@ -263,24 +265,22 @@ struct LibraryView: View {
                 endPoint: .bottomTrailing
             )
 
-            AsyncImage(url: item.posterURL) { phase in
-                switch phase {
-                case .success(let image):
-                    image.resizable().aspectRatio(contentMode: .fill)
-                case .failure:
+            WebImage(url: item.posterURL) { image in
+                image.resizable().aspectRatio(contentMode: .fill)
+            } placeholder: {
+                if item.posterURL == nil {
                     // Stylized fallback
                     VStack(spacing: 4) {
                         Image(systemName: item.type.icon)
                             .font(.title2)
                             .foregroundStyle(item.accentColor.opacity(0.7))
                     }
-                case .empty:
+                } else {
                     // Skeleton shimmer
                     ShimmerView()
-                @unknown default:
-                    EmptyView()
                 }
             }
+            .transition(.fade(duration: 0.2))
             .id(item.posterURL)
             .allowsHitTesting(false)
         }

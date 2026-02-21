@@ -1,4 +1,5 @@
 import SwiftUI
+import SDWebImage
 
 @Observable
 class SettingsManager {
@@ -16,6 +17,12 @@ class SettingsManager {
     }
     var ratingProvider: RatingProvider {
         didSet { UserDefaults.standard.set(ratingProvider.rawValue, forKey: "ratingProvider") }
+    }
+    var imageCacheDuration: ImageCacheDuration {
+        didSet { 
+            UserDefaults.standard.set(imageCacheDuration.rawValue, forKey: "imageCacheDuration")
+            updateCacheConfig()
+        }
     }
 
     var preferredColorScheme: ColorScheme? {
@@ -44,6 +51,19 @@ class SettingsManager {
         self.themeMode = ThemeMode(rawValue: rawTheme) ?? .system
         let rawRating = defaults.string(forKey: "ratingProvider") ?? RatingProvider.imdb.rawValue
         self.ratingProvider = RatingProvider(rawValue: rawRating) ?? .imdb
+        let rawCache = defaults.string(forKey: "imageCacheDuration") ?? ImageCacheDuration.oneWeek.rawValue
+        self.imageCacheDuration = ImageCacheDuration(rawValue: rawCache) ?? .oneWeek
+        
+        // Apply initial config
+        updateCacheConfig()
+    }
+
+    func updateCacheConfig() {
+        let cache = SDImageCache.shared
+        // Set max disk age
+        cache.config.maxDiskAge = imageCacheDuration.timeInterval
+        // Optional: Set a reasonable disk size limit (e.g. 500 MB)
+        cache.config.maxDiskSize = 1024 * 1024 * 500
     }
 }
 
@@ -71,6 +91,20 @@ nonisolated enum RatingProvider: String, CaseIterable, Sendable, Identifiable {
         switch self {
         case .imdb: "star.fill"
         case .tmdb: "star.circle.fill"
+        }
+    }
+}
+
+nonisolated enum ImageCacheDuration: String, CaseIterable, Sendable, Identifiable {
+    case oneWeek = "1 Week"
+    case oneMonth = "1 Month"
+
+    var id: String { rawValue }
+
+    var timeInterval: TimeInterval {
+        switch self {
+        case .oneWeek: return 60 * 60 * 24 * 7 // 7 days
+        case .oneMonth: return 60 * 60 * 24 * 30 // 30 days
         }
     }
 }

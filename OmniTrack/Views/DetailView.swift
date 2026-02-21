@@ -1,4 +1,5 @@
 import SwiftUI
+import SDWebImageSwiftUI
 
 struct DetailView: View {
     let item: MediaItem
@@ -85,11 +86,12 @@ struct DetailView: View {
         Color(hex: currentItem.accentColorHex).opacity(0.3)
             .frame(height: 300)
             .overlay {
-                AsyncImage(url: currentItem.backdropURL ?? currentItem.posterURL) { phase in
-                    if let image = phase.image {
-                        image.resizable().aspectRatio(contentMode: .fill)
-                    }
+                WebImage(url: currentItem.backdropURL ?? currentItem.posterURL) { image in
+                    image.resizable().aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    Color.clear
                 }
+                .transition(.fade(duration: 0.2))
                 .allowsHitTesting(false)
             }
             .clipped()
@@ -347,15 +349,14 @@ struct DetailView: View {
                 .frame(width: 56, height: 40)
                 .overlay {
                     if let url = episode.stillURL {
-                        AsyncImage(url: url) { phase in
-                            if let image = phase.image {
-                                image.resizable().aspectRatio(contentMode: .fill)
-                            } else {
-                                Text("\(episode.episodeNumber)")
-                                    .font(.caption.weight(.bold))
-                                    .foregroundStyle(.secondary)
-                            }
+                        WebImage(url: url) { image in
+                            image.resizable().aspectRatio(contentMode: .fill)
+                        } placeholder: {
+                            Text("\(episode.episodeNumber)")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.secondary)
                         }
+                        .transition(.fade(duration: 0.2))
                         .allowsHitTesting(false)
                     } else {
                         Text("\(episode.episodeNumber)")

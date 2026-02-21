@@ -1,4 +1,5 @@
 import SwiftUI
+import SDWebImageSwiftUI
 
 struct FeaturedCardView: View {
     let item: MediaItem
@@ -9,11 +10,12 @@ struct FeaturedCardView: View {
         Color(hex: item.accentColorHex).opacity(0.3)
             .frame(height: 220)
             .overlay {
-                AsyncImage(url: item.backdropURL ?? item.posterURL) { phase in
-                    if let image = phase.image {
-                        image.resizable().aspectRatio(contentMode: .fill)
-                    }
+                WebImage(url: item.backdropURL ?? item.posterURL) { image in
+                    image.resizable().aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    Color.clear
                 }
+                .transition(.fade(duration: 0.2))
                 .allowsHitTesting(false)
             }
             .clipShape(.rect(cornerRadius: 20))
