@@ -315,7 +315,7 @@ struct DrillDownListView: View {
             base = base.filter { $0.type == ft }
         }
 
-        return base.sorted { $0.rating > $1.rating }
+        return base.sorted { $0.effectiveRating(for: settings.ratingProvider) > $1.effectiveRating(for: settings.ratingProvider) }
     }
 
     private var showTypeFilter: Bool {

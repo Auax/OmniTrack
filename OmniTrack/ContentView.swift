@@ -9,6 +9,10 @@ struct ContentView: View {
                 HomeView()
             }
 
+            Tab("Discover", systemImage: "safari.fill") {
+                DiscoverView()
+            }
+
             Tab("Library", systemImage: "books.vertical.fill") {
                 LibraryView()
             }

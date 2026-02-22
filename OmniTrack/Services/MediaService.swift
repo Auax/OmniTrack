@@ -13,6 +13,20 @@ class MediaService {
     var errorMessage: String?
     var genreMedia: [MediaItem] = []
     var isLoadingGenre: Bool = false
+    
+    // MARK: - Discover State
+    var discoverMedia: [MediaItem] = []
+    var isDiscoverLoading: Bool = false
+    var currentDiscoverPage: Int = 1
+    var hasMoreDiscover: Bool = true
+    
+    var isLoadingMore: Bool = false
+    private var currentMoviePage: Int = 1
+    private var currentTVPage: Int = 1
+    private var currentAnimePage: Int = 1
+    private var hasMoreMovies: Bool = true
+    private var hasMoreTV: Bool = true
+    private var hasMoreAnime: Bool = true
 
     private let tmdbService = TMDBService()
     var genreMap: [Int: String] = [:]
@@ -98,6 +112,13 @@ class MediaService {
         isLoading = true
         errorMessage = nil
 
+        currentMoviePage = 1
+        currentTVPage = 1
+        currentAnimePage = 1
+        hasMoreMovies = true
+        hasMoreTV = true
+        hasMoreAnime = true
+
         do {
             if genreMap.isEmpty {
                 async let movieGenres = tmdbService.fetchMovieGenres()
@@ -148,6 +169,52 @@ class MediaService {
         }
 
         isLoading = false
+    }
+
+    func loadMoreContent(showMovies: Bool, showTVShows: Bool, showAnime: Bool) async {
+        guard !isLoadingMore, !isLoading else { return }
+        if !hasMoreMovies && !hasMoreTV && !hasMoreAnime { return }
+        
+        isLoadingMore = true
+        
+        do {
+            var newItems: [MediaItem] = []
+            
+            if showMovies && hasMoreMovies {
+                currentMoviePage += 1
+                let movies = try await tmdbService.fetchPopularMovies(page: currentMoviePage)
+                if movies.isEmpty { hasMoreMovies = false }
+                newItems.append(contentsOf: movies.map { mapMovie($0) })
+            }
+            
+            if showTVShows && hasMoreTV {
+                currentTVPage += 1
+                let tvShows = try await tmdbService.fetchPopularTV(page: currentTVPage)
+                if tvShows.isEmpty { hasMoreTV = false }
+                newItems.append(contentsOf: tvShows.map { mapTV($0, type: .tvShow) })
+            }
+            
+            if showAnime && hasMoreAnime {
+                currentAnimePage += 1
+                let animeList = try await tmdbService.fetchAnime(page: currentAnimePage)
+                if animeList.isEmpty { hasMoreAnime = false }
+                newItems.append(contentsOf: animeList.map { mapTV($0, type: .anime) })
+            }
+            
+            let combinedItems = allMedia + newItems
+            let uniqueItems = Dictionary(grouping: combinedItems, by: \.id).compactMapValues(\.first).values
+            allMedia = Array(uniqueItems).sorted { $0.rating > $1.rating }
+            
+            applyUserData()
+            applyEpisodeCounts()
+        } catch {
+            // Revert page increments on failure
+            if showMovies { currentMoviePage = max(1, currentMoviePage - 1) }
+            if showTVShows { currentTVPage = max(1, currentTVPage - 1) }
+            if showAnime { currentAnimePage = max(1, currentAnimePage - 1) }
+        }
+        
+        isLoadingMore = false
     }
 
     // MARK: - Search
@@ -217,6 +284,187 @@ class MediaService {
             searchResults = []
         }
         isSearching = false
+    }
+
+    // MARK: - Discover
+
+    private func fetchDiscoverPage(page: Int, type: MediaType?, catalog: DiscoverCatalog, genreId: Int?, query: String) async throws -> [MediaItem] {
+        var results: [MediaItem] = []
+        let isMovie = type == nil || type == .movie
+        let isTV = type == nil || type == .tvShow
+        let isAnime = type == nil || type == .anime
+
+        if !query.trimmingCharacters(in: .whitespaces).isEmpty {
+            if isMovie {
+                let movies = try await tmdbService.searchMovies(query: query, page: page)
+                results.append(contentsOf: movies.map { mapMovie($0) })
+            }
+            if isTV || isAnime {
+                let tvItems = try await tmdbService.searchTV(query: query, page: page)
+                for tv in tvItems {
+                    let isAnimation = tv.genreIds.contains(16)
+                    if isAnimation && isAnime {
+                        results.append(mapTV(tv, type: .anime))
+                    } else if !isAnimation && isTV {
+                        results.append(mapTV(tv, type: .tvShow))
+                    } else if isAnimation && !isAnime && isTV {
+                        results.append(mapTV(tv, type: .tvShow))
+                    }
+                }
+            }
+        } else if let gId = genreId {
+            if isMovie {
+                let movies = try await tmdbService.discoverMoviesByGenre(genreId: gId, page: page)
+                results.append(contentsOf: movies.map { mapMovie($0) })
+            }
+            if isTV || isAnime {
+                let tvItems = try await tmdbService.discoverTVByGenre(genreId: gId, page: page)
+                for tv in tvItems {
+                    let isAnimation = tv.genreIds.contains(16)
+                    if isAnimation && isAnime {
+                        results.append(mapTV(tv, type: .anime))
+                    } else if !isAnimation && isTV {
+                        results.append(mapTV(tv, type: .tvShow))
+                    } else if isAnimation && !isAnime && isTV {
+                        results.append(mapTV(tv, type: .tvShow))
+                    }
+                }
+            }
+        } else {
+            switch catalog {
+            case .popular:
+                if isMovie {
+                    let movies = try await tmdbService.fetchPopularMovies(page: page)
+                    results.append(contentsOf: movies.map { mapMovie($0) })
+                }
+                if isTV || isAnime {
+                    let tvItems = try await tmdbService.fetchPopularTV(page: page)
+                    for tv in tvItems {
+                        let isAnimation = tv.genreIds.contains(16)
+                        if isAnimation && isAnime {
+                            results.append(mapTV(tv, type: .anime))
+                        } else if !isAnimation && isTV {
+                            results.append(mapTV(tv, type: .tvShow))
+                        } else if isAnimation && !isAnime && isTV {
+                            results.append(mapTV(tv, type: .tvShow))
+                        }
+                    }
+                }
+            case .new:
+                if isMovie {
+                    let movies = try await tmdbService.fetchNowPlayingMovies(page: page)
+                    results.append(contentsOf: movies.map { mapMovie($0) })
+                }
+                if isTV || isAnime {
+                    let tvItems = try await tmdbService.fetchOnTheAirTV(page: page)
+                    for tv in tvItems {
+                        let isAnimation = tv.genreIds.contains(16)
+                        if isAnimation && isAnime {
+                            results.append(mapTV(tv, type: .anime))
+                        } else if !isAnimation && isTV {
+                            results.append(mapTV(tv, type: .tvShow))
+                        } else if isAnimation && !isAnime && isTV {
+                            results.append(mapTV(tv, type: .tvShow))
+                        }
+                    }
+                }
+            case .featured:
+                if isMovie {
+                    let movies = try await tmdbService.fetchTrendingMovies(page: page)
+                    results.append(contentsOf: movies.map { mapMovie($0) })
+                }
+                if isTV {
+                    let tvItems = try await tmdbService.fetchTrendingTV(page: page)
+                    for tv in tvItems {
+                        let isAnimation = tv.genreIds.contains(16)
+                        if !isAnimation { results.append(mapTV(tv, type: .tvShow)) }
+                    }
+                }
+                if isAnime {
+                    let tvItems = try await tmdbService.fetchAnime(page: page)
+                    for tv in tvItems { results.append(mapTV(tv, type: .anime)) }
+                }
+            }
+        }
+        return results
+    }
+
+    func loadDiscover(reset: Bool, type: MediaType?, catalog: DiscoverCatalog, genreId: Int?, query: String) async {
+        if reset {
+            currentDiscoverPage = 1
+            hasMoreDiscover = true
+            discoverMedia = []
+        }
+        
+        guard !isDiscoverLoading, hasMoreDiscover else { return }
+        
+        isDiscoverLoading = true
+        do {
+            if genreMap.isEmpty {
+                async let movieGenres = tmdbService.fetchMovieGenres()
+                async let tvGenres = tmdbService.fetchTVGenres()
+                let (mg, tg) = try await (movieGenres, tvGenres)
+                for g in mg { genreMap[g.id] = g.name }
+                for g in tg { genreMap[g.id] = g.name }
+            }
+
+            let pagesToFetch = Array(currentDiscoverPage..<(currentDiscoverPage + 5))
+            var pageResultsDict = [Int: [MediaItem]]()
+
+            for page in pagesToFetch {
+                let items = try await fetchDiscoverPage(page: page, type: type, catalog: catalog, genreId: genreId, query: query)
+                if items.isEmpty { hasMoreDiscover = false }
+                pageResultsDict[page] = items
+                if !hasMoreDiscover { break }
+            }
+
+            var merged: [MediaItem] = []
+            var seen = Set<Int>(discoverMedia.map { $0.id })
+            
+            for page in pagesToFetch.sorted() {
+                guard let results = pageResultsDict[page] else { continue }
+                for var item in results {
+                    if seen.contains(item.id) { continue }
+                    seen.insert(item.id)
+                    if let existing = allMedia.first(where: { $0.id == item.id }) {
+                        item.isWatched = existing.isWatched
+                        item.isInQueue = existing.isInQueue
+                        item.watchedEpisodes = existing.watchedEpisodes
+                        item.totalEpisodes = existing.totalEpisodes
+                        item.totalSeasons = existing.totalSeasons
+                    } else {
+                        item.isWatched = watchedIds.contains(item.id)
+                        item.isInQueue = queueIds.contains(item.id)
+                        item.watchedEpisodes = episodeWatchedMap[item.id]?.count ?? 0
+                    }
+                    merged.append(item)
+                }
+            }
+
+            // Also merge new items into allMedia so they're available elsewhere
+            for item in merged {
+                if !allMedia.contains(where: { $0.id == item.id }) {
+                    allMedia.append(item)
+                }
+            }
+
+            if merged.isEmpty && pageResultsDict.values.contains(where: { !$0.isEmpty }) {
+                // If everything was seen, keep trying next page if needed
+                if hasMoreDiscover {
+                    currentDiscoverPage += 5
+                    isDiscoverLoading = false // unlock for next fetch
+                    return await loadDiscover(reset: false, type: type, catalog: catalog, genreId: genreId, query: query)
+                }
+            } else if !merged.isEmpty {
+                discoverMedia.append(contentsOf: merged)
+                currentDiscoverPage += 5
+            }
+
+        } catch {
+            if reset { discoverMedia = [] }
+            hasMoreDiscover = false
+        }
+        isDiscoverLoading = false
     }
 
     // MARK: - Genre Discover
@@ -438,8 +686,56 @@ class MediaService {
 
         saveUserData()
         saveEpisodeData()
-        // Record a date for each key
-        for _ in keys { recordWatchedDate() }
+    }
+
+    func markSeasonWatched(mediaId: Int, seasonNumber: Int, episodeCount: Int, totalEpisodes: Int) {
+        if episodeWatchedMap[mediaId] == nil {
+            episodeWatchedMap[mediaId] = []
+        }
+        
+        guard episodeCount > 0 else { return }
+        for epNum in 1...episodeCount {
+            let key = "s\(seasonNumber)e\(epNum)"
+            episodeWatchedMap[mediaId]?.insert(key)
+        }
+        
+        recordWatchedDate()
+        
+        if let index = allMedia.firstIndex(where: { $0.id == mediaId }) {
+            allMedia[index].watchedEpisodes = episodeWatchedMap[mediaId]?.count ?? 0
+            
+            if totalEpisodes > 0 && (episodeWatchedMap[mediaId]?.count ?? 0) >= totalEpisodes {
+                allMedia[index].isWatched = true
+                allMedia[index].isInQueue = false
+                watchedIds.insert(mediaId)
+                queueIds.remove(mediaId)
+            }
+        }
+        
+        saveUserData()
+        saveEpisodeData()
+    }
+
+    func unmarkSeasonWatched(mediaId: Int, seasonNumber: Int, episodeCount: Int) {
+        guard episodeCount > 0 else { return }
+        
+        for epNum in 1...episodeCount {
+            let key = "s\(seasonNumber)e\(epNum)"
+            episodeWatchedMap[mediaId]?.remove(key)
+        }
+        
+        if let index = allMedia.firstIndex(where: { $0.id == mediaId }) {
+            allMedia[index].watchedEpisodes = episodeWatchedMap[mediaId]?.count ?? 0
+            
+            let totalEpisodes = allMedia[index].totalEpisodes ?? 0
+            if totalEpisodes > 0 && (episodeWatchedMap[mediaId]?.count ?? 0) < totalEpisodes {
+                allMedia[index].isWatched = false
+                watchedIds.remove(mediaId)
+            }
+        }
+        
+        saveUserData()
+        saveEpisodeData()
     }
 
     func unmarkAllEpisodesWatched(mediaId: Int) {

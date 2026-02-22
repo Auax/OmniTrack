@@ -161,6 +161,13 @@ nonisolated final class TMDBService: Sendable {
         return response.results
     }
 
+    func fetchNowPlayingMovies(page: Int = 1) async throws -> [TMDBMovie] {
+        let url = URL(string: "\(baseURL)/movie/now_playing?api_key=\(apiKey)&language=en-US&page=\(page)")!
+        let (data, _) = try await URLSession.shared.data(from: url)
+        let response = try JSONDecoder().decode(TMDBMovieResponse.self, from: data)
+        return response.results
+    }
+
     func fetchTrendingTV(page: Int = 1) async throws -> [TMDBTV] {
         let url = URL(string: "\(baseURL)/trending/tv/week?api_key=\(apiKey)&language=en-US&page=\(page)")!
         let (data, _) = try await URLSession.shared.data(from: url)
@@ -170,6 +177,13 @@ nonisolated final class TMDBService: Sendable {
 
     func fetchPopularTV(page: Int = 1) async throws -> [TMDBTV] {
         let url = URL(string: "\(baseURL)/tv/popular?api_key=\(apiKey)&language=en-US&page=\(page)")!
+        let (data, _) = try await URLSession.shared.data(from: url)
+        let response = try JSONDecoder().decode(TMDBTVResponse.self, from: data)
+        return response.results
+    }
+
+    func fetchOnTheAirTV(page: Int = 1) async throws -> [TMDBTV] {
+        let url = URL(string: "\(baseURL)/tv/on_the_air?api_key=\(apiKey)&language=en-US&page=\(page)")!
         let (data, _) = try await URLSession.shared.data(from: url)
         let response = try JSONDecoder().decode(TMDBTVResponse.self, from: data)
         return response.results

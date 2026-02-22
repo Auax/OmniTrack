@@ -305,6 +305,27 @@ struct DetailView: View {
                             .foregroundStyle(.green)
                     }
 
+                    Image(systemName: watchedCount >= season.episodeCount ? "checkmark.circle.fill" : "checkmark.circle")
+                        .font(.title3)
+                        .foregroundStyle(watchedCount >= season.episodeCount ? .green : .secondary)
+                        .onTapGesture {
+                            if watchedCount >= season.episodeCount {
+                                mediaService.unmarkSeasonWatched(
+                                    mediaId: currentItem.id,
+                                    seasonNumber: season.seasonNumber,
+                                    episodeCount: season.episodeCount
+                                )
+                            } else {
+                                mediaService.markSeasonWatched(
+                                    mediaId: currentItem.id,
+                                    seasonNumber: season.seasonNumber,
+                                    episodeCount: season.episodeCount,
+                                    totalEpisodes: currentItem.totalEpisodes ?? 0
+                                )
+                            }
+                        }
+                        .padding(.trailing, 4)
+
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)

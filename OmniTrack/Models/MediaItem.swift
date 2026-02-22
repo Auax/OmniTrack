@@ -68,6 +68,13 @@ struct MediaItem: Identifiable, Hashable {
         return formattedRating
     }
 
+    func effectiveRating(for provider: RatingProvider) -> Double {
+        switch provider {
+        case .tmdb: return rating
+        case .imdb: return imdbRating ?? rating
+        }
+    }
+
     var tmdbId: Int {
         switch type {
         case .movie: return id

@@ -8,7 +8,7 @@ struct LibraryView: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var selectedTab: LibraryTab = .queue
     @State private var selectedItem: MediaItem?
-    @State private var sortOption: SortOption = .rating
+    @State private var sortOption: SortOption = .defaultOrder
     @State private var selectedGenre: String? = nil
     @State private var selectedType: MediaType? = nil
     @State private var expandedItems: Set<Int> = []
@@ -66,7 +66,8 @@ struct LibraryView: View {
             items = items.filter { $0.genres.contains(genre) }
         }
         switch sortOption {
-        case .rating: items.sort { $0.rating > $1.rating }
+        case .defaultOrder: break
+        case .rating: items.sort { $0.effectiveRating(for: settings.ratingProvider) > $1.effectiveRating(for: settings.ratingProvider) }
         case .yearDesc: items.sort { $0.year > $1.year }
         case .yearAsc: items.sort { $0.year < $1.year }
         case .titleAZ: items.sort { $0.title.localizedCompare($1.title) == .orderedAscending }
@@ -76,24 +77,14 @@ struct LibraryView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                Picker("", selection: $selectedTab) {
-                    ForEach(LibraryTab.allCases, id: \.self) { tab in
-                        Text(tab.rawValue).tag(tab)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
-                .padding(.bottom, 12)
-
+            Group {
                 if currentItems.isEmpty {
                     ContentUnavailableView(
                         selectedTab.emptyTitle,
                         systemImage: selectedTab.emptyIcon,
                         description: Text(selectedTab.emptyDescription)
                     )
-                    .frame(maxHeight: .infinity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 10) {
@@ -120,12 +111,21 @@ struct LibraryView: View {
                     }
                 }
             }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                tabSelector
+            }
             .background(AppTheme.adaptiveBackground(colorScheme))
             .navigationTitle("Library")
-            .searchable(text: $searchText, prompt: "Search Library")
+            .searchable(
+                text: $searchText,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: "Search Library"
+            )
             .toolbar {
-                ToolbarItemGroup(placement: .topBarTrailing) {
+                ToolbarItem(placement: .topBarTrailing) {
                     filterMenu
+                }
+                ToolbarItem(placement: .topBarTrailing) {
                     sortMenu
                 }
             }
@@ -139,6 +139,18 @@ struct LibraryView: View {
                 searchText = ""
             }
         }
+    }
+
+    private var tabSelector: some View {
+        Picker("", selection: $selectedTab) {
+            ForEach(LibraryTab.allCases, id: \.self) { tab in
+                Text(tab.rawValue).tag(tab)
+            }
+        }
+        .pickerStyle(.segmented)
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 12)
     }
 
     // MARK: - Filter Menu
@@ -184,6 +196,8 @@ struct LibraryView: View {
             Image(systemName: selectedType != nil || selectedGenre != nil ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(selectedType != nil || selectedGenre != nil ? Color.accentColor : Color.primary)
+                .padding(8)
+                .contentShape(Rectangle())
         }
     }
 
@@ -202,6 +216,8 @@ struct LibraryView: View {
         } label: {
             Image(systemName: "arrow.up.arrow.down")
                 .font(.subheadline.weight(.semibold))
+                .padding(8)
+                .contentShape(Rectangle())
         }
     }
 

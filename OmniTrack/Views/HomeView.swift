@@ -4,148 +4,95 @@ struct HomeView: View {
     @Environment(MediaService.self) private var mediaService
     @Environment(SettingsManager.self) private var settings
     @Environment(\.colorScheme) private var colorScheme
-    @State private var selectedFilter: MediaType? = nil
-    @State private var selectedGenre: String? = nil
-    @State private var sortOption: SortOption = .rating
+
     @State private var searchText: String = ""
+    @State private var searchTask: Task<Void, Never>?
     @State private var selectedItem: MediaItem?
     @State private var hasLoaded: Bool = false
-    @State private var searchTask: Task<Void, Never>?
 
-    private var activeTypes: [MediaType] {
-        var types: [MediaType] = []
-        if settings.showMovies { types.append(.movie) }
-        if settings.showTVShows { types.append(.tvShow) }
-        if settings.showAnime { types.append(.anime) }
+    private var enabledTypes: Set<MediaType> {
+        var types = Set<MediaType>()
+        if settings.showMovies { types.insert(.movie) }
+        if settings.showTVShows { types.insert(.tvShow) }
+        if settings.showAnime { types.insert(.anime) }
         return types
     }
 
-    // Items used when not searching
-    private var typeFilteredMedia: [MediaItem] {
-        if let filter = selectedFilter {
-            return mediaService.allMedia.filter { $0.type == filter }
-        }
-        return mediaService.allMedia
+    private func isTypeEnabled(_ type: MediaType) -> Bool {
+        enabledTypes.contains(type)
     }
 
-    private var availableGenres: [String] {
-        Array(Set(typeFilteredMedia.flatMap { $0.genres })).sorted()
+    private var watchlistItems: [MediaItem] {
+        mediaService.queueItems
+            .filter { isTypeEnabled($0.type) && !$0.isWatched }
     }
 
-    private var displayedMedia: [MediaItem] {
-        // Search mode
-        if !searchText.isEmpty {
-            var results = mediaService.searchResults
-            if let filter = selectedFilter {
-                results = results.filter { $0.type == filter }
+    private var continueWatchingItems: [MediaItem] {
+        mediaService.allMedia
+            .filter { isTypeEnabled($0.type) && !$0.isWatched && $0.progress > 0 && $0.progress < 1 }
+            .sorted { lhs, rhs in
+                if lhs.progress == rhs.progress { return lhs.rating > rhs.rating }
+                return lhs.progress > rhs.progress
             }
-            return results
+    }
+
+    private var upNextItems: [MediaItem] {
+        if !continueWatchingItems.isEmpty {
+            return continueWatchingItems
         }
 
-        // Genre selected → use genre-fetched results
-        if selectedGenre != nil {
-            if mediaService.isLoadingGenre { return [] }
-            var items = mediaService.genreMedia
-            if let filter = selectedFilter {
-                items = items.filter { $0.type == filter }
-            }
-            switch sortOption {
-            case .rating: items.sort { $0.rating > $1.rating }
-            case .yearDesc: items.sort { $0.year > $1.year }
-            case .yearAsc: items.sort { $0.year < $1.year }
-            case .titleAZ: items.sort { $0.title.localizedCompare($1.title) == .orderedAscending }
-            }
-            return items
+        if !watchlistItems.isEmpty {
+            return watchlistItems
         }
 
-        // Default: all media
-        var items = typeFilteredMedia
-        switch sortOption {
-        case .rating: items.sort { $0.rating > $1.rating }
-        case .yearDesc: items.sort { $0.year > $1.year }
-        case .yearAsc: items.sort { $0.year < $1.year }
-        case .titleAZ: items.sort { $0.title.localizedCompare($1.title) == .orderedAscending }
-        }
-        return items
+        return mediaService.featuredAll.filter { isTypeEnabled($0.type) }
+    }
+
+    private var upNextTitle: String {
+        continueWatchingItems.isEmpty ? "Up Next" : "Continue Watching"
+    }
+
+    private var isSearchingQuery: Bool {
+        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 0) {
-                    filterBar
-                        .padding(.top, 8)
-                        .padding(.bottom, 8)
-
-                    if !searchText.isEmpty {
-                        searchResultsHeader
-                    } else {
-                        genreFilterBar
-                            .padding(.bottom, 16)
-                    }
-
+                VStack(spacing: 20) {
                     if mediaService.isLoading && mediaService.allMedia.isEmpty {
                         loadingView
                     } else if let error = mediaService.errorMessage, mediaService.allMedia.isEmpty {
                         errorView(error)
+                    } else if isSearchingQuery {
+                        searchResultsContent
                     } else {
-                        // Featured section (only when not searching and no genre selected)
-                        if searchText.isEmpty && selectedGenre == nil {
-                            featuredSections
-                        }
+                        carouselSection(
+                            title: upNextTitle,
+                            icon: continueWatchingItems.isEmpty ? "play.circle" : "play.circle.fill",
+                            items: upNextItems,
+                            emptyMessage: "No titles yet. Add items to your queue from Discover.",
+                            showsContinueActions: !continueWatchingItems.isEmpty
+                        )
 
-                        // Results
-                        if mediaService.isSearching || mediaService.isLoadingGenre {
-                            ProgressView(mediaService.isSearching ? "Searching..." : "Loading...")
-                                .frame(maxWidth: .infinity)
-                                .padding(.top, 40)
-                        } else if !displayedMedia.isEmpty {
-                            sectionHeader(
-                                selectedGenre != nil ? selectedGenre! : "Discover",
-                                icon: selectedGenre != nil ? "tag" : "square.grid.2x2"
-                            )
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 8)
-                            .padding(.top, 4)
-
-                            LazyVStack(spacing: 10) {
-                                ForEach(displayedMedia) { item in
-                                    Button {
-                                        selectedItem = item
-                                    } label: {
-                                        MediaCardView(
-                                            item: item,
-                                            onMarkWatched: { mediaService.markWatched(item) },
-                                            onAddToQueue: { mediaService.addToQueue(item) }
-                                        )
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                            .padding(.horizontal, 16)
-                        } else if !searchText.isEmpty {
-                            ContentUnavailableView.search(text: searchText)
-                                .padding(.top, 40)
-                        } else if selectedGenre != nil && !mediaService.isLoadingGenre {
-                            ContentUnavailableView(
-                                "No Results",
-                                systemImage: "magnifyingglass",
-                                description: Text("No content found for \(selectedGenre ?? "this genre").")
-                            )
-                            .padding(.top, 40)
-                        }
+                        carouselSection(
+                            title: "Your Watchlist",
+                            icon: "bookmark.fill",
+                            items: watchlistItems,
+                            emptyMessage: "Your watchlist is empty."
+                        )
                     }
                 }
-                .padding(.bottom, 20)
+                .padding(.top, 12)
+                .padding(.bottom, 24)
             }
             .background(AppTheme.adaptiveBackground(colorScheme))
             .navigationTitle("OmniTrack")
-            .searchable(text: $searchText, prompt: "Search any movie, show or anime...")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    sortMenu
-                }
-            }
+            .searchable(
+                text: $searchText,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: "Search any movie, show or anime..."
+            )
             .refreshable {
                 await mediaService.loadContent(
                     showMovies: settings.showMovies,
@@ -167,7 +114,7 @@ struct HomeView: View {
             }
             .onChange(of: searchText) { _, newValue in
                 searchTask?.cancel()
-                if newValue.isEmpty {
+                if newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     mediaService.searchResults = []
                     return
                 }
@@ -182,192 +129,160 @@ struct HomeView: View {
                     )
                 }
             }
-            .onChange(of: selectedGenre) { _, newGenre in
-                if let genre = newGenre {
-                    Task {
-                        await mediaService.discoverByGenre(
-                            genreName: genre,
-                            selectedFilter: selectedFilter,
-                            showMovies: settings.showMovies,
-                            showTVShows: settings.showTVShows,
-                            showAnime: settings.showAnime
-                        )
-                    }
-                } else {
-                    mediaService.genreMedia = []
-                }
-            }
-            .onChange(of: settings.showMovies) { _, newValue in
-                if !newValue && selectedFilter == .movie { selectedFilter = nil }
-                reloadContent()
-            }
-            .onChange(of: settings.showTVShows) { _, newValue in
-                if !newValue && selectedFilter == .tvShow { selectedFilter = nil }
-                reloadContent()
-            }
-            .onChange(of: settings.showAnime) { _, newValue in
-                if !newValue && selectedFilter == .anime { selectedFilter = nil }
-                reloadContent()
-            }
+            .onChange(of: settings.showMovies) { _, _ in reloadContent() }
+            .onChange(of: settings.showTVShows) { _, _ in reloadContent() }
+            .onChange(of: settings.showAnime) { _, _ in reloadContent() }
         }
     }
 
-    // MARK: - Featured Sections
-
-    @ViewBuilder
-    private var featuredSections: some View {
-        if selectedFilter == nil {
-            if !mediaService.featuredAll.isEmpty {
-                featuredSection("Featured", icon: "sparkles", items: mediaService.featuredAll)
-            }
-        } else if selectedFilter == .movie {
-            if settings.showMovies && !mediaService.featuredMovies.isEmpty {
-                featuredSection("Featured Movies", icon: "film", items: mediaService.featuredMovies)
-            }
-        } else if selectedFilter == .tvShow {
-            if settings.showTVShows && !mediaService.featuredTVShows.isEmpty {
-                featuredSection("Featured TV Shows", icon: "tv", items: mediaService.featuredTVShows)
-            }
-        } else if selectedFilter == .anime {
-            if settings.showAnime && !mediaService.featuredAnime.isEmpty {
-                featuredSection("Featured Anime", icon: "sparkles.tv", items: mediaService.featuredAnime)
-            }
-        }
-    }
-
-    private func featuredSection(_ title: String, icon: String, items: [MediaItem]) -> some View {
+    private func carouselSection(
+        title: String,
+        icon: String,
+        items: [MediaItem],
+        emptyMessage: String,
+        showsContinueActions: Bool = false
+    ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             sectionHeader(title, icon: icon)
                 .padding(.horizontal, 16)
 
-            ScrollView(.horizontal) {
-                HStack(spacing: 14) {
-                    ForEach(items) { item in
-                        Button {
-                            selectedItem = item
-                        } label: {
-                            FeaturedCardView(item: item)
-                                .frame(width: UIScreen.main.bounds.width - 48)
+            if items.isEmpty {
+                ContentUnavailableView(
+                    title,
+                    systemImage: icon,
+                    description: Text(emptyMessage)
+                )
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 20)
+            } else {
+                ScrollView(.horizontal) {
+                    HStack(spacing: 14) {
+                        ForEach(items.prefix(12)) { item in
+                            if showsContinueActions && item.hasSeasonsAndEpisodes {
+                                continueWatchingCard(item)
+                            } else {
+                                Button {
+                                    selectedItem = item
+                                } label: {
+                                    FeaturedCardView(item: item)
+                                        .frame(width: UIScreen.main.bounds.width - 72)
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
-                        .buttonStyle(.plain)
                     }
                 }
-            }
-            .contentMargins(.horizontal, 16)
-            .scrollIndicators(.hidden)
-            .scrollTargetBehavior(.viewAligned)
-        }
-        .padding(.bottom, 20)
-    }
-
-    // MARK: - Search Results Header
-
-    private var searchResultsHeader: some View {
-        Group {
-            if !mediaService.searchResults.isEmpty {
-                HStack {
-                    Text("\(mediaService.searchResults.count) results on TMDB")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 8)
+                .contentMargins(.horizontal, 16)
+                .scrollIndicators(.hidden)
+                .scrollTargetBehavior(.viewAligned)
             }
         }
     }
 
-    // MARK: - Filter Bar
+    private func continueWatchingCard(_ item: MediaItem) -> some View {
+        let info = nextUpEpisodeInfo(for: item)
 
-    private var filterBar: some View {
-        ScrollView(.horizontal) {
+        return VStack(alignment: .leading, spacing: 8) {
+            Button {
+                selectedItem = item
+            } label: {
+                FeaturedCardView(item: item)
+                    .frame(width: UIScreen.main.bounds.width - 72)
+            }
+            .buttonStyle(.plain)
+
             HStack(spacing: 8) {
-                FilterChipView(
-                    title: "All",
-                    icon: "square.grid.2x2",
-                    isSelected: selectedFilter == nil,
-                    action: { withAnimation(.snappy) { selectedFilter = nil; selectedGenre = nil } }
-                )
+                Text(info.label)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
 
-                ForEach(activeTypes) { type in
-                    FilterChipView(
-                        title: type.rawValue,
-                        icon: type.icon,
-                        isSelected: selectedFilter == type,
-                        action: { withAnimation(.snappy) { selectedFilter = type; selectedGenre = nil } }
-                    )
+                Spacer()
+
+                Button {
+                    withAnimation(.snappy) {
+                        mediaService.markEpisodeWatched(
+                            mediaId: item.id,
+                            key: info.key,
+                            totalEpisodes: item.totalEpisodes ?? 0
+                        )
+                    }
+                } label: {
+                    Label("Mark Watched", systemImage: "checkmark.circle.fill")
+                        .font(.caption.weight(.semibold))
                 }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
             }
+            .padding(.horizontal, 4)
         }
-        .contentMargins(.horizontal, 16)
-        .scrollIndicators(.hidden)
+        .frame(width: UIScreen.main.bounds.width - 72, alignment: .leading)
     }
 
-    private var genreFilterBar: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: 6) {
-                if !availableGenres.isEmpty {
+    private func nextUpEpisodeInfo(for item: MediaItem) -> (key: String, label: String) {
+        let watchedKeys = mediaService.watchedEpisodeKeys(mediaId: item.id)
+        guard !watchedKeys.isEmpty else {
+            return ("s1e1", "Next: S1 · E1")
+        }
+
+        var maxSeason = 1
+        var maxEpisode = 0
+
+        for key in watchedKeys {
+            let parsed = parseEpisodeKey(key)
+            if parsed.season > maxSeason || (parsed.season == maxSeason && parsed.episode > maxEpisode) {
+                maxSeason = parsed.season
+                maxEpisode = parsed.episode
+            }
+        }
+
+        let nextEpisode = maxEpisode + 1
+        let nextKey = "s\(maxSeason)e\(nextEpisode)"
+        return (nextKey, "Next: S\(maxSeason) · E\(nextEpisode)")
+    }
+
+    private func parseEpisodeKey(_ key: String) -> (season: Int, episode: Int) {
+        let cleaned = key.lowercased()
+        let parts = cleaned.split(separator: "e")
+        if parts.count == 2,
+           let season = Int(parts[0].dropFirst()),
+           let episode = Int(parts[1]) {
+            return (season, episode)
+        }
+        return (0, 0)
+    }
+
+    @ViewBuilder
+    private var searchResultsContent: some View {
+        if mediaService.isSearching {
+            ProgressView("Searching...")
+                .frame(maxWidth: .infinity)
+                .padding(.top, 40)
+        } else if mediaService.searchResults.isEmpty {
+            ContentUnavailableView.search(text: searchText)
+                .padding(.top, 40)
+        } else {
+            sectionHeader("Search Results", icon: "magnifyingglass")
+                .padding(.horizontal, 16)
+                .padding(.bottom, 4)
+
+            LazyVStack(spacing: 10) {
+                ForEach(mediaService.searchResults) { item in
                     Button {
-                        withAnimation(.snappy) { selectedGenre = nil }
+                        selectedItem = item
                     } label: {
-                        Text("All Genres")
-                            .font(.caption.weight(.medium))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(selectedGenre == nil ? Color.primary.opacity(0.12) : Color.clear)
-                            .foregroundStyle(selectedGenre == nil ? .primary : .secondary)
-                            .clipShape(Capsule())
-                            .overlay(
-                                Capsule().stroke(.primary.opacity(selectedGenre == nil ? 0 : 0.15), lineWidth: 1)
-                            )
+                        MediaCardView(
+                            item: item,
+                            onMarkWatched: { mediaService.markWatched(item) },
+                            onAddToQueue: { mediaService.addToQueue(item) }
+                        )
                     }
                     .buttonStyle(.plain)
-
-                    ForEach(availableGenres, id: \.self) { genre in
-                        Button {
-                            withAnimation(.snappy) {
-                                selectedGenre = selectedGenre == genre ? nil : genre
-                            }
-                        } label: {
-                            Text(genre)
-                                .font(.caption.weight(.medium))
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(selectedGenre == genre ? Color.primary.opacity(0.12) : Color.clear)
-                                .foregroundStyle(selectedGenre == genre ? .primary : .secondary)
-                                .clipShape(Capsule())
-                                .overlay(
-                                    Capsule().stroke(.primary.opacity(selectedGenre == genre ? 0 : 0.15), lineWidth: 1)
-                                )
-                        }
-                        .buttonStyle(.plain)
-                    }
                 }
             }
-        }
-        .contentMargins(.horizontal, 16)
-        .scrollIndicators(.hidden)
-    }
-
-    // MARK: - Sort Menu
-
-    private var sortMenu: some View {
-        Menu {
-            ForEach(SortOption.allCases) { option in
-                Button {
-                    withAnimation(.snappy) { sortOption = option }
-                } label: {
-                    Label(option.rawValue, systemImage: option.icon)
-                }
-                .disabled(sortOption == option)
-            }
-        } label: {
-            Image(systemName: "arrow.up.arrow.down")
-                .font(.subheadline.weight(.semibold))
+            .padding(.horizontal, 16)
         }
     }
-
-    // MARK: - Helpers
 
     private var loadingView: some View {
         VStack(spacing: 16) {

@@ -17,6 +17,7 @@ nonisolated enum MediaType: String, Codable, Sendable, CaseIterable, Identifiabl
 }
 
 nonisolated enum SortOption: String, CaseIterable, Sendable, Identifiable {
+    case defaultOrder = "Default"
     case rating = "Rating"
     case yearDesc = "Newest First"
     case yearAsc = "Oldest First"
@@ -26,6 +27,7 @@ nonisolated enum SortOption: String, CaseIterable, Sendable, Identifiable {
 
     var icon: String {
         switch self {
+        case .defaultOrder: "flame.fill"
         case .rating: "star.fill"
         case .yearDesc: "calendar.badge.clock"
         case .yearAsc: "calendar"
