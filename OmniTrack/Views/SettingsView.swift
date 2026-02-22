@@ -59,6 +59,15 @@ struct SettingsView: View {
                         Label("Anime", systemImage: "sparkles.tv")
                     }
                     .tint(.blue)
+
+                    Picker(selection: $settings.animeTitlePreference) {
+                        ForEach(AnimeTitlePreference.allCases) { option in
+                            Text(option.rawValue)
+                                .tag(option)
+                        }
+                    } label: {
+                        Label("Anime Titles", systemImage: settings.animeTitlePreference.icon)
+                    }
                     
                     Picker(selection: $settings.imageCacheDuration) {
                         ForEach(ImageCacheDuration.allCases) { duration in
@@ -71,7 +80,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Content")
                 } footer: {
-                    Text("Choose media types and how long images are saved offline.")
+                    Text("Choose media types, anime title language, and how long images are saved offline.")
                 }
 
                 Section {
@@ -98,7 +107,7 @@ struct SettingsView: View {
                     HStack {
                         Text("Data Source")
                         Spacer()
-                        Text("TMDB")
+                        Text("TMDB + AniList")
                             .foregroundStyle(.secondary)
                     }
                     HStack {

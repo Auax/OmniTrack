@@ -19,14 +19,64 @@ struct MediaItem: Identifiable, Hashable {
     var isInQueue: Bool
     let genreIds: [Int]
     var imdbRating: Double?
+    let animeRomajiTitle: String?
+    let animeEnglishTitle: String?
+
+    init(
+        id: Int,
+        title: String,
+        subtitle: String,
+        overview: String,
+        type: MediaType,
+        posterPath: String?,
+        backdropPath: String?,
+        rating: Double,
+        year: Int,
+        genres: [String],
+        totalEpisodes: Int?,
+        watchedEpisodes: Int,
+        totalSeasons: Int?,
+        isWatched: Bool,
+        isInQueue: Bool,
+        genreIds: [Int],
+        imdbRating: Double? = nil,
+        animeRomajiTitle: String? = nil,
+        animeEnglishTitle: String? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.subtitle = subtitle
+        self.overview = overview
+        self.type = type
+        self.posterPath = posterPath
+        self.backdropPath = backdropPath
+        self.rating = rating
+        self.year = year
+        self.genres = genres
+        self.totalEpisodes = totalEpisodes
+        self.watchedEpisodes = watchedEpisodes
+        self.totalSeasons = totalSeasons
+        self.isWatched = isWatched
+        self.isInQueue = isInQueue
+        self.genreIds = genreIds
+        self.imdbRating = imdbRating
+        self.animeRomajiTitle = animeRomajiTitle
+        self.animeEnglishTitle = animeEnglishTitle
+    }
 
     var posterURL: URL? {
         guard let path = posterPath else { return nil }
+        if path.hasPrefix("http://") || path.hasPrefix("https://") {
+            return URL(string: path)
+        }
         return URL(string: "https://image.tmdb.org/t/p/w500\(path)")
     }
 
     var backdropURL: URL? {
         guard let path = backdropPath else { return nil }
+        if path.hasPrefix("http://") || path.hasPrefix("https://") {
+            return URL(string: path)
+        }
         return URL(string: "https://image.tmdb.org/t/p/w780\(path)")
     }
 
@@ -62,16 +112,50 @@ struct MediaItem: Identifiable, Hashable {
     }
 
     var formattedImdbRating: String {
+        if isAniListAnime {
+            return formattedRating
+        }
         if let imdb = imdbRating {
             return String(format: "%.1f", imdb)
         }
         return formattedRating
     }
 
+    var isAniListAnime: Bool {
+        type == .anime && id >= 1_000_000_000
+    }
+
+    var animeRatingIconColor: Color {
+        guard isAniListAnime else { return .yellow }
+
+        switch rating {
+        case 8.5...:
+            return Color(hex: "7DD3FC") // Highest: light blue
+        case 7.0..<8.5:
+            return Color(hex: "38BDF8")
+        case 5.5..<7.0:
+            return Color(hex: "22C55E")
+        case 4.0..<5.5:
+            return Color(hex: "F59E0B")
+        default:
+            return Color(hex: "EF4444")
+        }
+    }
+
+    func preferredDisplayTitle(animeTitlePreference: AnimeTitlePreference) -> String {
+        guard isAniListAnime else { return title }
+        switch animeTitlePreference {
+        case .romaji:
+            return animeRomajiTitle ?? animeEnglishTitle ?? title
+        case .translated:
+            return animeEnglishTitle ?? animeRomajiTitle ?? title
+        }
+    }
+
     func effectiveRating(for provider: RatingProvider) -> Double {
         switch provider {
         case .tmdb: return rating
-        case .imdb: return imdbRating ?? rating
+        case .imdb: return isAniListAnime ? rating : (imdbRating ?? rating)
         }
     }
 

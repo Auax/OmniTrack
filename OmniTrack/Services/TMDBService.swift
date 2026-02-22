@@ -49,6 +49,8 @@ nonisolated struct TMDBMovie: Codable, Sendable {
 nonisolated struct TMDBTV: Codable, Sendable {
     let id: Int
     let name: String
+    let originalName: String?
+    let originalLanguage: String?
     let overview: String
     let posterPath: String?
     let backdropPath: String?
@@ -58,6 +60,8 @@ nonisolated struct TMDBTV: Codable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case id, name, overview
+        case originalName = "original_name"
+        case originalLanguage = "original_language"
         case posterPath = "poster_path"
         case backdropPath = "backdrop_path"
         case voteAverage = "vote_average"
@@ -293,4 +297,3 @@ nonisolated struct OMDBResponse: Codable, Sendable {
         case imdbRating
     }
 }
-

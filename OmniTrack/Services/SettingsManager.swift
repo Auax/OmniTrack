@@ -18,6 +18,9 @@ class SettingsManager {
     var ratingProvider: RatingProvider {
         didSet { UserDefaults.standard.set(ratingProvider.rawValue, forKey: "ratingProvider") }
     }
+    var animeTitlePreference: AnimeTitlePreference {
+        didSet { UserDefaults.standard.set(animeTitlePreference.rawValue, forKey: "animeTitlePreference") }
+    }
     var imageCacheDuration: ImageCacheDuration {
         didSet { 
             UserDefaults.standard.set(imageCacheDuration.rawValue, forKey: "imageCacheDuration")
@@ -51,6 +54,8 @@ class SettingsManager {
         self.themeMode = ThemeMode(rawValue: rawTheme) ?? .system
         let rawRating = defaults.string(forKey: "ratingProvider") ?? RatingProvider.imdb.rawValue
         self.ratingProvider = RatingProvider(rawValue: rawRating) ?? .imdb
+        let rawAnimeTitle = defaults.string(forKey: "animeTitlePreference") ?? AnimeTitlePreference.romaji.rawValue
+        self.animeTitlePreference = AnimeTitlePreference(rawValue: rawAnimeTitle) ?? .romaji
         let rawCache = defaults.string(forKey: "imageCacheDuration") ?? ImageCacheDuration.oneWeek.rawValue
         self.imageCacheDuration = ImageCacheDuration(rawValue: rawCache) ?? .oneWeek
         
@@ -109,3 +114,16 @@ nonisolated enum ImageCacheDuration: String, CaseIterable, Sendable, Identifiabl
     }
 }
 
+nonisolated enum AnimeTitlePreference: String, CaseIterable, Sendable, Identifiable {
+    case romaji = "Japanese (Romaji)"
+    case translated = "Translated"
+
+    var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .romaji: "character.book.closed"
+        case .translated: "character.textbox"
+        }
+    }
+}

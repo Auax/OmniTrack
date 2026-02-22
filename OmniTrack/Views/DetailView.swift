@@ -20,6 +20,10 @@ struct DetailView: View {
         mediaService.allMedia.first(where: { $0.id == item.id }) ?? item
     }
 
+    private var isAniListAnimeItem: Bool {
+        currentItem.type == .anime && currentItem.id >= MediaService.aniListAnimeIdOffset
+    }
+
     private var totalEpisodesCount: Int {
         seasons.reduce(0) { $0 + $1.episodeCount }
     }
@@ -121,7 +125,7 @@ struct DetailView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Text(currentItem.title)
+            Text(currentItem.preferredDisplayTitle(animeTitlePreference: settings.animeTitlePreference))
                 .font(.largeTitle.bold())
 
             HStack(spacing: 16) {
@@ -363,81 +367,69 @@ struct DetailView: View {
 
     private func episodeRow(_ episode: Episode) -> some View {
         let isWatched = mediaService.isEpisodeWatched(mediaId: currentItem.id, key: episode.episodeKey)
-        let isQueued = mediaService.isEpisodeQueued(mediaId: currentItem.id, key: episode.episodeKey)
-
-        return HStack(spacing: 12) {
-            Color(hex: currentItem.accentColorHex).opacity(0.2)
-                .frame(width: 56, height: 40)
-                .overlay {
-                    if let url = episode.stillURL {
-                        WebImage(url: url) { image in
-                            image.resizable().aspectRatio(contentMode: .fill)
-                        } placeholder: {
+        
+        return Button {
+            withAnimation(.snappy) {
+                mediaService.toggleEpisodeWatched(
+                    mediaId: currentItem.id,
+                    key: episode.episodeKey,
+                    totalEpisodes: totalEpisodesCount
+                )
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Color(hex: currentItem.accentColorHex).opacity(0.2)
+                    .frame(width: 56, height: 40)
+                    .overlay {
+                        if let url = episode.stillURL {
+                            WebImage(url: url) { image in
+                                image.resizable().aspectRatio(contentMode: .fill)
+                            } placeholder: {
+                                Text("\(episode.episodeNumber)")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .transition(.fade(duration: 0.2))
+                            .allowsHitTesting(false)
+                        } else {
                             Text("\(episode.episodeNumber)")
                                 .font(.caption.weight(.bold))
                                 .foregroundStyle(.secondary)
                         }
-                        .transition(.fade(duration: 0.2))
-                        .allowsHitTesting(false)
-                    } else {
-                        Text("\(episode.episodeNumber)")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.secondary)
+                    }
+                    .clipShape(.rect(cornerRadius: 6))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("E\(episode.episodeNumber): \(episode.name)")
+                        .font(.caption.weight(.medium))
+                        .lineLimit(1)
+
+                    HStack(spacing: 6) {
+                        if let runtime = episode.formattedRuntime {
+                            Text(runtime)
+                                .font(.system(size: 10))
+                                .foregroundStyle(.tertiary)
+                        }
+                        if let airDate = episode.formattedAirDate {
+                            Text(airDate)
+                                .font(.system(size: 10))
+                                .foregroundStyle(.tertiary)
+                        }
                     }
                 }
-                .clipShape(.rect(cornerRadius: 6))
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text("E\(episode.episodeNumber): \(episode.name)")
-                    .font(.caption.weight(.medium))
-                    .lineLimit(1)
+                Spacer(minLength: 0)
 
-                HStack(spacing: 6) {
-                    if let runtime = episode.formattedRuntime {
-                        Text(runtime)
-                            .font(.system(size: 10))
-                            .foregroundStyle(.tertiary)
-                    }
-                    if let airDate = episode.formattedAirDate {
-                        Text(airDate)
-                            .font(.system(size: 10))
-                            .foregroundStyle(.tertiary)
-                    }
-                }
+                Image(systemName: isWatched ? "checkmark.circle.fill" : "checkmark.circle")
+                    .font(.body)
+                    .foregroundStyle(isWatched ? .green : .secondary)
             }
-
-            Spacer(minLength: 0)
-
-            HStack(spacing: 6) {
-                Button {
-                    withAnimation(.snappy) {
-                        mediaService.toggleEpisodeWatched(
-                            mediaId: currentItem.id,
-                            key: episode.episodeKey,
-                            totalEpisodes: totalEpisodesCount
-                        )
-                    }
-                } label: {
-                    Image(systemName: isWatched ? "checkmark.circle.fill" : "checkmark.circle")
-                        .font(.body)
-                        .foregroundStyle(isWatched ? .green : .secondary)
-                }
-
-                Button {
-                    withAnimation(.snappy) {
-                        mediaService.toggleEpisodeQueued(mediaId: currentItem.id, key: episode.episodeKey)
-                    }
-                } label: {
-                    Image(systemName: isQueued ? "bookmark.fill" : "bookmark")
-                        .font(.caption)
-                        .foregroundStyle(isQueued ? .orange : .secondary)
-                }
-            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(AppTheme.adaptiveCardBackground(colorScheme))
+            .clipShape(.rect(cornerRadius: 8))
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(AppTheme.adaptiveCardBackground(colorScheme))
-        .clipShape(.rect(cornerRadius: 8))
+        .buttonStyle(.plain)
     }
 
     // MARK: - Overview & Genres
@@ -480,6 +472,35 @@ struct DetailView: View {
     private func loadTVDetails() async {
         guard currentItem.hasSeasonsAndEpisodes else { return }
         isLoadingSeasons = true
+
+        if isAniListAnimeItem {
+            let episodeCount = max(0, currentItem.totalEpisodes ?? 0)
+            let seasonCount = max(1, currentItem.totalSeasons ?? 1)
+            tvDetail = nil
+
+            if episodeCount > 0 {
+                mediaService.updateMediaEpisodeInfo(
+                    mediaId: currentItem.id,
+                    totalEpisodes: episodeCount,
+                    totalSeasons: seasonCount
+                )
+
+                seasons = [
+                    Season(
+                        id: currentItem.id,
+                        seasonNumber: 1,
+                        name: seasonCount > 1 ? "All Seasons" : "Season 1",
+                        episodeCount: episodeCount,
+                        episodes: syntheticAniListEpisodes(count: episodeCount)
+                    )
+                ]
+            } else {
+                seasons = []
+            }
+
+            isLoadingSeasons = false
+            return
+        }
 
         do {
             let detail = try await tmdbService.fetchTVDetail(id: currentItem.tmdbId)
@@ -543,6 +564,25 @@ struct DetailView: View {
                 // Silently fail
             }
             loadingSeasonNumbers.remove(seasonNumber)
+        }
+    }
+
+    private func syntheticAniListEpisodes(count: Int) -> [Episode] {
+        guard count > 0 else { return [] }
+
+        return (1...count).map { number in
+            Episode(
+                id: currentItem.id * 10_000 + number,
+                episodeNumber: number,
+                seasonNumber: 1,
+                name: "Episode \(number)",
+                overview: "",
+                stillPath: nil,
+                airDate: nil,
+                runtime: nil,
+                isWatched: mediaService.isEpisodeWatched(mediaId: currentItem.id, key: "s1e\(number)"),
+                isInQueue: mediaService.isEpisodeQueued(mediaId: currentItem.id, key: "s1e\(number)")
+            )
         }
     }
 }

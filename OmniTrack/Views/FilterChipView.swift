@@ -18,15 +18,23 @@ struct FilterChipView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
-            .background(isSelected ? Color.primary : Color.clear)
-            .foregroundStyle(isSelected
-                ? (colorScheme == .dark ? Color.black : Color.white)
-                : Color.primary
+            .foregroundStyle(isSelected ? Color.primary : Color.primary.opacity(0.9))
+            .background(
+                Capsule()
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        Capsule()
+                            .fill(isSelected ? Color.accentColor.opacity(colorScheme == .dark ? 0.22 : 0.14) : Color.clear)
+                    )
             )
-            .clipShape(Capsule())
             .overlay(
                 Capsule()
-                    .stroke(.primary.opacity(isSelected ? 0 : 0.2), lineWidth: 1)
+                    .stroke(
+                        isSelected
+                            ? Color.accentColor.opacity(colorScheme == .dark ? 0.6 : 0.45)
+                            : Color.primary.opacity(colorScheme == .dark ? 0.22 : 0.14),
+                        lineWidth: 1
+                    )
             )
         }
         .buttonStyle(.plain)

@@ -27,7 +27,7 @@ struct DiscoverView: View {
     }
 
     var availableGenres: [String] {
-        Array(mediaService.genreMap.values).sorted()
+        Array(Set(mediaService.genreMap.values)).sorted()
     }
 
     private var highlightedGenres: [String] {
@@ -101,95 +101,69 @@ struct DiscoverView: View {
     }
 
     private var stickyFilterPillsHeader: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: 8) {
-                FilterChipView(
-                    title: "All",
-                    icon: "square.grid.2x2",
-                    isSelected: selectedType == nil,
-                    action: {
-                        withAnimation(.snappy) {
-                            selectedType = nil
-                        }
-                    }
-                )
-
-                ForEach(activeTypes) { type in
+        VStack(spacing: 8) {
+            ScrollView(.horizontal) {
+                HStack(spacing: 8) {
                     FilterChipView(
-                        title: type.rawValue,
-                        icon: type.icon,
-                        isSelected: selectedType == type,
+                        title: "All",
+                        icon: "square.grid.2x2",
+                        isSelected: selectedType == nil,
                         action: {
                             withAnimation(.snappy) {
-                                selectedType = type
+                                selectedType = nil
                             }
                         }
                     )
-                }
 
-                FilterChipView(
-                    title: "Popular",
-                    icon: "chart.line.uptrend.xyaxis",
-                    isSelected: selectedCatalog == .popular,
-                    action: {
-                        withAnimation(.snappy) {
-                            selectedCatalog = .popular
-                        }
-                    }
-                )
-
-                FilterChipView(
-                    title: "Trending",
-                    icon: "flame.fill",
-                    isSelected: selectedCatalog == .featured,
-                    action: {
-                        withAnimation(.snappy) {
-                            selectedCatalog = .featured
-                        }
-                    }
-                )
-
-                FilterChipView(
-                    title: "New",
-                    icon: "sparkles",
-                    isSelected: selectedCatalog == .new,
-                    action: {
-                        withAnimation(.snappy) {
-                            selectedCatalog = .new
-                        }
-                    }
-                )
-
-                FilterChipView(
-                    title: "All Genres",
-                    icon: "tag",
-                    isSelected: selectedGenre == nil,
-                    action: {
-                        withAnimation(.snappy) {
-                            selectedGenre = nil
-                        }
-                    }
-                )
-
-                ForEach(highlightedGenres, id: \.self) { genre in
-                    FilterChipView(
-                        title: genre,
-                        icon: "tag.fill",
-                        isSelected: selectedGenre == genre,
-                        action: {
-                            withAnimation(.snappy) {
-                                selectedGenre = selectedGenre == genre ? nil : genre
+                    ForEach(activeTypes) { type in
+                        FilterChipView(
+                            title: type.rawValue,
+                            icon: type.icon,
+                            isSelected: selectedType == type,
+                            action: {
+                                withAnimation(.snappy) {
+                                    selectedType = type
+                                }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
             }
+            .contentMargins(.horizontal, 16)
+            .scrollIndicators(.hidden)
+
+            ScrollView(.horizontal) {
+                HStack(spacing: 8) {
+                    FilterChipView(
+                        title: "All Genres",
+                        icon: "tag",
+                        isSelected: selectedGenre == nil,
+                        action: {
+                            withAnimation(.snappy) {
+                                selectedGenre = nil
+                            }
+                        }
+                    )
+
+                    ForEach(highlightedGenres, id: \.self) { genre in
+                        FilterChipView(
+                            title: genre,
+                            icon: "tag.fill",
+                            isSelected: selectedGenre == genre,
+                            action: {
+                                withAnimation(.snappy) {
+                                    selectedGenre = selectedGenre == genre ? nil : genre
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+            .contentMargins(.horizontal, 16)
+            .scrollIndicators(.hidden)
         }
-        .contentMargins(.horizontal, 16)
-        .scrollIndicators(.hidden)
         .padding(.top, 8)
         .padding(.bottom, 10)
-        .background(AppTheme.adaptiveBackground(colorScheme))
     }
 
     @ViewBuilder
@@ -342,14 +316,8 @@ struct DiscoverPosterCard: View {
                 )
 
                 // Rating Overlay
-                HStack(spacing: 4) {
-                    Image(systemName: "star.fill")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.yellow)
-                    Text(item.formattedRating)
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.white)
-                }
+                RatingView(item: item, fontSize: 12, starSize: 10)
+                    .foregroundStyle(.white)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .background(.ultraThinMaterial)

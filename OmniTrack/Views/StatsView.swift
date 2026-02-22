@@ -429,9 +429,9 @@ struct DrillDownListView: View {
 
                 HStack(spacing: 6) {
                     HStack(spacing: 2) {
-                        Image(systemName: "star.fill")
+                        Image(systemName: ratingIcon(for: item))
                             .font(.system(size: 9))
-                            .foregroundStyle(.yellow)
+                            .foregroundStyle(ratingIconColor(for: item))
                         Text(displayRating(for: item))
                             .font(.caption2.weight(.medium))
                     }
@@ -460,9 +460,20 @@ struct DrillDownListView: View {
     }
 
     private func displayRating(for item: MediaItem) -> String {
+        if item.isAniListAnime {
+            return item.formattedRating
+        }
         if settings.ratingProvider == .imdb, let imdb = item.imdbRating {
             return String(format: "%.1f", imdb)
         }
         return item.formattedRating
+    }
+
+    private func ratingIcon(for item: MediaItem) -> String {
+        item.isAniListAnime ? "a.circle.fill" : "star.fill"
+    }
+
+    private func ratingIconColor(for item: MediaItem) -> Color {
+        item.isAniListAnime ? item.animeRatingIconColor : .yellow
     }
 }

@@ -29,27 +29,26 @@ struct HomeView: View {
 
     private var continueWatchingItems: [MediaItem] {
         mediaService.allMedia
-            .filter { isTypeEnabled($0.type) && !$0.isWatched && $0.progress > 0 && $0.progress < 1 }
-            .sorted { lhs, rhs in
-                if lhs.progress == rhs.progress { return lhs.rating > rhs.rating }
-                return lhs.progress > rhs.progress
+            .filter { item in
+                guard isTypeEnabled(item.type), item.hasSeasonsAndEpisodes, !item.isWatched else {
+                    return false
+                }
+
+                let watchedCount = mediaService.watchedEpisodeCount(mediaId: item.id)
+                guard watchedCount > 0 else { return false }
+
+                if let total = item.totalEpisodes, total > 0 {
+                    return watchedCount < total
+                }
+
+                return true
             }
-    }
-
-    private var upNextItems: [MediaItem] {
-        if !continueWatchingItems.isEmpty {
-            return continueWatchingItems
-        }
-
-        if !watchlistItems.isEmpty {
-            return watchlistItems
-        }
-
-        return mediaService.featuredAll.filter { isTypeEnabled($0.type) }
-    }
-
-    private var upNextTitle: String {
-        continueWatchingItems.isEmpty ? "Up Next" : "Continue Watching"
+            .sorted { lhs, rhs in
+                let lhsWatched = mediaService.watchedEpisodeCount(mediaId: lhs.id)
+                let rhsWatched = mediaService.watchedEpisodeCount(mediaId: rhs.id)
+                if lhsWatched == rhsWatched { return lhs.rating > rhs.rating }
+                return lhsWatched > rhsWatched
+            }
     }
 
     private var isSearchingQuery: Bool {
@@ -67,13 +66,15 @@ struct HomeView: View {
                     } else if isSearchingQuery {
                         searchResultsContent
                     } else {
-                        carouselSection(
-                            title: upNextTitle,
-                            icon: continueWatchingItems.isEmpty ? "play.circle" : "play.circle.fill",
-                            items: upNextItems,
-                            emptyMessage: "No titles yet. Add items to your queue from Discover.",
-                            showsContinueActions: !continueWatchingItems.isEmpty
-                        )
+                        if !continueWatchingItems.isEmpty {
+                            carouselSection(
+                                title: "Continue Watching",
+                                icon: "play.circle.fill",
+                                items: continueWatchingItems,
+                                emptyMessage: "No in-progress titles.",
+                                showsContinueActions: true
+                            )
+                        }
 
                         carouselSection(
                             title: "Your Watchlist",
@@ -208,11 +209,12 @@ struct HomeView: View {
                         )
                     }
                 } label: {
-                    Label("Mark Watched", systemImage: "checkmark.circle.fill")
+                    Label("Mark Episode", systemImage: "checkmark.circle.fill")
                         .font(.caption.weight(.semibold))
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
+                .tint(.gray)
             }
             .padding(.horizontal, 4)
         }

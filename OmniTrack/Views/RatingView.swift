@@ -14,13 +14,28 @@ struct RatingView: View {
         self.starSize = starSize
     }
 
+    private var isAniListAnime: Bool {
+        item.isAniListAnime
+    }
+
+    private var ratingIconName: String {
+        isAniListAnime ? "a.circle.fill" : "star.fill"
+    }
+
+    private var ratingIconColor: Color {
+        isAniListAnime ? item.animeRatingIconColor : .yellow
+    }
+
     var body: some View {
         HStack(spacing: 3) {
-            Image(systemName: "star.fill")
+            Image(systemName: ratingIconName)
                 .font(.system(size: starSize))
-                .foregroundStyle(.yellow)
+                .foregroundStyle(ratingIconColor)
 
-            if settings.ratingProvider == .imdb {
+            if isAniListAnime {
+                Text(item.formattedRating)
+                    .font(.system(size: fontSize, weight: .semibold))
+            } else if settings.ratingProvider == .imdb {
                 if let imdb = item.imdbRating {
                     Text(String(format: "%.1f", imdb))
                         .font(.system(size: fontSize, weight: .semibold))
@@ -45,7 +60,7 @@ struct RatingView: View {
             }
         }
         .task {
-            if settings.ratingProvider == .imdb && item.imdbRating == nil {
+            if !isAniListAnime && settings.ratingProvider == .imdb && item.imdbRating == nil {
                 _ = await mediaService.fetchImdbRatingForItem(item)
             }
         }
