@@ -61,7 +61,7 @@ struct ProfileView: View {
         }
         .padding(16)
         .background(AppTheme.adaptiveCardBackground(colorScheme))
-        .clipShape(.rect(cornerRadius: 16))
+        .clipShape(Squircle(cornerRadius: 16))
     }
 
     private var statsGrid: some View {
@@ -170,7 +170,7 @@ struct ProfileView: View {
                 .allowsHitTesting(false)
             }
             .frame(width: 110, height: 160)
-            .clipShape(.rect(cornerRadius: 10))
+            .clipShape(Squircle(cornerRadius: 10))
 
             Text(item.title)
                 .font(.caption.weight(.medium))

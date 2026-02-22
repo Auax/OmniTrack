@@ -18,7 +18,7 @@ struct FeaturedCardView: View {
                 .transition(.fade(duration: 0.2))
                 .allowsHitTesting(false)
             }
-            .clipShape(.rect(cornerRadius: 20))
+            .clipShape(Squircle(cornerRadius: 20))
             .overlay(alignment: .bottom) {
                 LinearGradient(
                     stops: [
@@ -28,7 +28,7 @@ struct FeaturedCardView: View {
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                .clipShape(.rect(cornerRadius: 20))
+                .clipShape(Squircle(cornerRadius: 20))
             }
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: 6) {
@@ -70,4 +70,3 @@ struct FeaturedCardView: View {
             }
     }
 }
-

@@ -86,7 +86,7 @@ struct MediaCardView: View {
                 )
             }
         }
-        .clipShape(.rect(cornerRadius: 16))
+        .clipShape(Squircle(cornerRadius: 16))
     }
 
     private var cardContent: some View {
@@ -135,7 +135,7 @@ struct MediaCardView: View {
         }
         .padding(12)
         .background(AppTheme.adaptiveCardBackground(colorScheme))
-        .clipShape(.rect(cornerRadius: 16))
+        .clipShape(Squircle(cornerRadius: 16))
         .shadow(color: .black.opacity(colorScheme == .dark ? 0.4 : 0.08), radius: 8, y: 4)
     }
 
@@ -165,7 +165,7 @@ struct MediaCardView: View {
             .allowsHitTesting(false)
         }
         .frame(width: 80, height: 112)
-        .clipShape(.rect(cornerRadius: 10))
+        .clipShape(Squircle(cornerRadius: 10))
     }
 
     private var ratingBadge: some View {

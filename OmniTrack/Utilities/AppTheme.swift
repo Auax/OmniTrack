@@ -21,3 +21,20 @@ enum AppTheme {
         colorScheme == .dark ? Color(white: 0.08) : .white
     }
 }
+
+struct Squircle: InsettableShape {
+    var cornerRadius: CGFloat
+    var insetAmount: CGFloat = 0
+
+    func path(in rect: CGRect) -> Path {
+        let insetRect = rect.insetBy(dx: insetAmount, dy: insetAmount)
+        let radius = min(cornerRadius, min(insetRect.width, insetRect.height) * 0.5)
+        return RoundedRectangle(cornerRadius: radius, style: .continuous).path(in: insetRect)
+    }
+
+    func inset(by amount: CGFloat) -> some InsettableShape {
+        var copy = self
+        copy.insetAmount += amount
+        return copy
+    }
+}

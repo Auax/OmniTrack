@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct HomeView: View {
+    let onExplore: () -> Void
     @Environment(MediaService.self) private var mediaService
     @Environment(SettingsManager.self) private var settings
     @Environment(\.colorScheme) private var colorScheme
@@ -9,6 +10,10 @@ struct HomeView: View {
     @State private var searchTask: Task<Void, Never>?
     @State private var selectedItem: MediaItem?
     @State private var hasLoaded: Bool = false
+
+    init(onExplore: @escaping () -> Void = {}) {
+        self.onExplore = onExplore
+    }
 
     private var enabledTypes: Set<MediaType> {
         var types = Set<MediaType>()
@@ -76,12 +81,18 @@ struct HomeView: View {
                             )
                         }
 
-                        carouselSection(
-                            title: "Your Watchlist",
-                            icon: "bookmark.fill",
-                            items: watchlistItems,
-                            emptyMessage: "Your watchlist is empty."
-                        )
+                        if watchlistItems.isEmpty {
+                            if continueWatchingItems.isEmpty {
+                                emptyWatchlistView
+                            }
+                        } else {
+                            carouselSection(
+                                title: "Your Watchlist",
+                                icon: "bookmark.fill",
+                                items: watchlistItems,
+                                emptyMessage: "Your watchlist is empty."
+                            )
+                        }
                     }
                 }
                 .padding(.top, 12)
@@ -141,20 +152,37 @@ struct HomeView: View {
         icon: String,
         items: [MediaItem],
         emptyMessage: String,
-        showsContinueActions: Bool = false
+        showsContinueActions: Bool = false,
+        emptyActionTitle: String? = nil,
+        emptyAction: (() -> Void)? = nil
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             sectionHeader(title, icon: icon)
                 .padding(.horizontal, 16)
 
             if items.isEmpty {
-                ContentUnavailableView(
-                    title,
-                    systemImage: icon,
-                    description: Text(emptyMessage)
-                )
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 20)
+                if let emptyActionTitle, let emptyAction {
+                    ContentUnavailableView {
+                        Label(title, systemImage: icon)
+                    } description: {
+                        Text(emptyMessage)
+                    } actions: {
+                        Button(emptyActionTitle) {
+                            emptyAction()
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 20)
+                } else {
+                    ContentUnavailableView(
+                        title,
+                        systemImage: icon,
+                        description: Text(emptyMessage)
+                    )
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 20)
+                }
             } else {
                 ScrollView(.horizontal) {
                     HStack(spacing: 14) {
@@ -252,6 +280,23 @@ struct HomeView: View {
             return (season, episode)
         }
         return (0, 0)
+    }
+
+    private var emptyWatchlistView: some View {
+        ContentUnavailableView {
+            Label("Nothing here yet", systemImage: "sparkles")
+        } description: {
+            Text("Your watchlist is feeling a bit lonely.\nExplore new titles to get started!")
+        } actions: {
+            Button("Explore") {
+                onExplore()
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(colorScheme == .dark ? .white : .black)
+            .foregroundStyle(colorScheme == .dark ? .black : .white)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 20)
     }
 
     @ViewBuilder

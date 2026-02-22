@@ -7,6 +7,7 @@ struct StatsView: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var selectedItem: MediaItem?
     @State private var drillDownType: DrillDownType?
+    @State private var showSettings: Bool = false
 
     enum DrillDownType: Hashable, Identifiable {
         case watched
@@ -56,12 +57,25 @@ struct StatsView: View {
                 .padding(.vertical, 12)
             }
             .background(AppTheme.adaptiveBackground(colorScheme))
-            .navigationTitle("Stats")
+            .navigationTitle("Profile")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showSettings = true
+                    } label: {
+                        Label("Settings", systemImage: "gearshape.fill")
+                    }
+                    .accessibilityLabel("Open Settings")
+                }
+            }
             .sheet(item: $selectedItem) { item in
                 DetailView(item: item)
             }
             .sheet(item: $drillDownType) { type in
                 DrillDownListView(type: type)
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
             }
         }
     }
@@ -196,7 +210,7 @@ struct StatsView: View {
         }
         .padding(14)
         .background(AppTheme.adaptiveCardBackground(colorScheme))
-        .clipShape(.rect(cornerRadius: 14))
+        .clipShape(Squircle(cornerRadius: 14))
     }
 
     // MARK: - Recently Watched
@@ -267,7 +281,7 @@ struct StatsView: View {
                 .allowsHitTesting(false)
             }
             .frame(width: 110, height: 160)
-            .clipShape(.rect(cornerRadius: 10))
+            .clipShape(Squircle(cornerRadius: 10))
 
             Text(item.title)
                 .font(.caption.weight(.medium))
@@ -420,7 +434,7 @@ struct DrillDownListView: View {
                 .allowsHitTesting(false)
             }
             .frame(width: 44, height: 64)
-            .clipShape(.rect(cornerRadius: 8))
+            .clipShape(Squircle(cornerRadius: 8))
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.title)

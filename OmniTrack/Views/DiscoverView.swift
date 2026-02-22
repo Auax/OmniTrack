@@ -326,7 +326,7 @@ struct DiscoverPosterCard: View {
             }
         }
         .aspectRatio(2/3, contentMode: .fit)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .clipShape(Squircle(cornerRadius: 12))
         .shadow(color: .black.opacity(colorScheme == .dark ? 0.3 : 0.1), radius: 5, y: 3)
     }
 }

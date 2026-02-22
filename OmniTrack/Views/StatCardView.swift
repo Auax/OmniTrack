@@ -28,6 +28,6 @@ struct StatCardView: View {
         }
         .padding(16)
         .background(AppTheme.adaptiveCardBackground(colorScheme))
-        .clipShape(.rect(cornerRadius: 14))
+        .clipShape(Squircle(cornerRadius: 14))
     }
 }

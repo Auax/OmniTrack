@@ -115,16 +115,6 @@ struct DetailView: View {
 
     private var titleSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: currentItem.type.icon)
-                    .font(.subheadline)
-                    .foregroundStyle(currentItem.accentColor)
-                Text(currentItem.type.rawValue.uppercased())
-                    .font(.caption.weight(.bold))
-                    .tracking(1)
-                    .foregroundStyle(.secondary)
-            }
-
             Text(currentItem.preferredDisplayTitle(animeTitlePreference: settings.animeTitlePreference))
                 .font(.largeTitle.bold())
 
@@ -162,15 +152,15 @@ struct DetailView: View {
                 }
             } label: {
                 Label(
-                    currentItem.isWatched ? "Watched" : "Mark Watched",
-                    systemImage: currentItem.isWatched ? "checkmark.circle.fill" : "checkmark.circle"
+                    currentItem.isWatched ? "Watched" : "Watch",
+                    systemImage: currentItem.isWatched ? "checkmark" : "eye"
                 )
                 .font(.subheadline.weight(.semibold))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
                 .background(currentItem.isWatched ? .green.opacity(0.15) : AppTheme.adaptiveSecondary(colorScheme))
                 .foregroundStyle(currentItem.isWatched ? .green : .primary)
-                .clipShape(.rect(cornerRadius: 12))
+                .clipShape(Squircle(cornerRadius: 12))
             }
             .sensoryFeedback(.impact, trigger: currentItem.isWatched)
 
@@ -180,15 +170,15 @@ struct DetailView: View {
                 }
             } label: {
                 Label(
-                    currentItem.isInQueue ? "In Queue" : "Add to Queue",
-                    systemImage: currentItem.isInQueue ? "bookmark.fill" : "bookmark"
+                    currentItem.isInQueue ? "In Watchlist" : "Watchlist",
+                    systemImage: currentItem.isInQueue ? "plus.circle.fill" : "plus.circle"
                 )
                 .font(.subheadline.weight(.semibold))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
                 .background(currentItem.isInQueue ? .orange.opacity(0.15) : AppTheme.adaptiveSecondary(colorScheme))
                 .foregroundStyle(currentItem.isInQueue ? .orange : .primary)
-                .clipShape(.rect(cornerRadius: 12))
+                .clipShape(Squircle(cornerRadius: 12))
             }
             .sensoryFeedback(.impact, trigger: currentItem.isInQueue)
         }
@@ -228,7 +218,7 @@ struct DetailView: View {
                 }
                 .padding(16)
                 .background(AppTheme.adaptiveSecondary(colorScheme))
-                .clipShape(.rect(cornerRadius: 14))
+                .clipShape(Squircle(cornerRadius: 14))
             }
         }
     }
@@ -248,13 +238,18 @@ struct DetailView: View {
 
     @ViewBuilder
     private var seasonsSection: some View {
-        if currentItem.hasSeasonsAndEpisodes && !seasons.isEmpty {
+        if currentItem.hasSeasonsAndEpisodes && !seasons.isEmpty, let selectedSeason {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Seasons & Episodes")
                     .font(.headline)
-
-                ForEach(seasons) { season in
-                    seasonRow(season)
+                seasonRow(selectedSeason)
+            }
+            .onAppear {
+                if expandedSeason == nil {
+                    expandedSeason = seasons.first?.seasonNumber
+                }
+                if selectedSeason.episodes.isEmpty {
+                    loadEpisodesForSeason(selectedSeason.seasonNumber)
                 }
             }
         } else if currentItem.hasSeasonsAndEpisodes && isLoadingSeasons {
@@ -273,101 +268,105 @@ struct DetailView: View {
         }
     }
 
-    private func seasonRow(_ season: Season) -> some View {
-        VStack(spacing: 0) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    if expandedSeason == season.seasonNumber {
-                        expandedSeason = nil
-                    } else {
-                        expandedSeason = season.seasonNumber
-                        if season.episodes.isEmpty {
-                            loadEpisodesForSeason(season.seasonNumber)
-                        }
-                    }
-                }
-            } label: {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(season.name)
-                            .font(.subheadline.weight(.semibold))
-                        Text("\(season.episodeCount) episodes")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-
-                    let seasonPrefix = "s\(season.seasonNumber)e"
-                    let watchedCount = mediaService.watchedEpisodeKeys(mediaId: currentItem.id)
-                        .filter { $0.hasPrefix(seasonPrefix) }
-                        .count
-                    
-                    if watchedCount > 0 {
-                        Text("\(watchedCount)/\(season.episodeCount)")
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.green)
-                    }
-
-                    Image(systemName: watchedCount >= season.episodeCount ? "checkmark.circle.fill" : "checkmark.circle")
-                        .font(.title3)
-                        .foregroundStyle(watchedCount >= season.episodeCount ? .green : .secondary)
-                        .onTapGesture {
-                            if watchedCount >= season.episodeCount {
-                                mediaService.unmarkSeasonWatched(
-                                    mediaId: currentItem.id,
-                                    seasonNumber: season.seasonNumber,
-                                    episodeCount: season.episodeCount
-                                )
-                            } else {
-                                mediaService.markSeasonWatched(
-                                    mediaId: currentItem.id,
-                                    seasonNumber: season.seasonNumber,
-                                    episodeCount: season.episodeCount,
-                                    totalEpisodes: currentItem.totalEpisodes ?? 0
-                                )
-                            }
-                        }
-                        .padding(.trailing, 4)
-
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .rotationEffect(.degrees(expandedSeason == season.seasonNumber ? 90 : 0))
-                }
-                .padding(14)
-                .background(AppTheme.adaptiveSecondary(colorScheme))
-                .clipShape(.rect(cornerRadius: 12))
-            }
-            .buttonStyle(.plain)
-
-            if expandedSeason == season.seasonNumber {
-                VStack(spacing: 1) {
-                    if loadingSeasonNumbers.contains(season.seasonNumber) {
-                        HStack {
-                            ProgressView()
-                                .controlSize(.small)
-                            Text("Loading episodes...")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.vertical, 12)
-                    } else {
-                        ForEach(season.episodes) { episode in
-                            episodeRow(episode)
-                        }
-                    }
-                }
-                .padding(.top, 4)
-                .transition(.opacity)
-            }
+    private var selectedSeason: Season? {
+        if let expandedSeason,
+           let match = seasons.first(where: { $0.seasonNumber == expandedSeason }) {
+            return match
         }
-        .clipShape(.rect(cornerRadius: 12))
+        return seasons.first
     }
 
-    private func episodeRow(_ episode: Episode) -> some View {
+    private func seasonRow(_ season: Season) -> some View {
+        let watchedCount = seasonWatchedCount(season)
+        let isSeasonWatched = season.episodeCount > 0 && watchedCount >= season.episodeCount
+
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
+                Menu {
+                    ForEach(seasons) { option in
+                        Button {
+                            withAnimation(.snappy) {
+                                expandedSeason = option.seasonNumber
+                            }
+                            if option.episodes.isEmpty {
+                                loadEpisodesForSeason(option.seasonNumber)
+                            }
+                        } label: {
+                            if option.seasonNumber == season.seasonNumber {
+                                Label(displaySeasonTitle(option), systemImage: "checkmark")
+                            } else {
+                                Text(displaySeasonTitle(option))
+                            }
+                        }
+                    }
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 8) {
+                            Text(displaySeasonTitle(season))
+                                .font(.title2.weight(.bold))
+                                .foregroundStyle(.primary)
+
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Text("\(season.episodeCount) episodes")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                Button {
+                    withAnimation(.snappy) {
+                        toggleSeasonWatched(season, isSeasonWatched: isSeasonWatched)
+                    }
+                } label: {
+                    Image(systemName: isSeasonWatched ? "checkmark.circle.fill" : "checkmark.circle")
+                        .font(.title2)
+                        .foregroundStyle(isSeasonWatched ? .green : .secondary)
+                }
+                .buttonStyle(.plain)
+            }
+
+            if loadingSeasonNumbers.contains(season.seasonNumber) {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Loading episodes...")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 8)
+            } else if season.episodes.isEmpty {
+                Text("No episodes available yet.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 8)
+            } else {
+                ScrollView(.horizontal) {
+                    HStack(spacing: 12) {
+                        ForEach(season.episodes) { episode in
+                            episodeCard(episode)
+                        }
+                    }
+                }
+                .padding(.horizontal, -20)
+                .padding(.leading, 16)
+                .padding(.bottom, 16)
+                .scrollIndicators(.hidden)
+                .scrollTargetBehavior(.viewAligned)
+            }
+        }
+    }
+
+    private func episodeCard(_ episode: Episode) -> some View {
         let isWatched = mediaService.isEpisodeWatched(mediaId: currentItem.id, key: episode.episodeKey)
-        
+        let cardWidth = max(UIScreen.main.bounds.width - 96, 280)
+
         return Button {
             withAnimation(.snappy) {
                 mediaService.toggleEpisodeWatched(
@@ -377,59 +376,136 @@ struct DetailView: View {
                 )
             }
         } label: {
-            HStack(spacing: 12) {
-                Color(hex: currentItem.accentColorHex).opacity(0.2)
-                    .frame(width: 56, height: 40)
-                    .overlay {
-                        if let url = episode.stillURL {
-                            WebImage(url: url) { image in
-                                image.resizable().aspectRatio(contentMode: .fill)
-                            } placeholder: {
-                                Text("\(episode.episodeNumber)")
-                                    .font(.caption.weight(.bold))
-                                    .foregroundStyle(.secondary)
-                            }
-                            .transition(.fade(duration: 0.2))
-                            .allowsHitTesting(false)
-                        } else {
-                            Text("\(episode.episodeNumber)")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(.secondary)
-                        }
+            ZStack(alignment: .bottomLeading) {
+                Color(hex: currentItem.accentColorHex).opacity(0.32)
+
+                if let url = episode.stillURL {
+                    WebImage(url: url) { image in
+                        image.resizable().aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        Color.black.opacity(0.15)
                     }
-                    .clipShape(.rect(cornerRadius: 6))
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("E\(episode.episodeNumber): \(episode.name)")
-                        .font(.caption.weight(.medium))
-                        .lineLimit(1)
-
-                    HStack(spacing: 6) {
-                        if let runtime = episode.formattedRuntime {
-                            Text(runtime)
-                                .font(.system(size: 10))
-                                .foregroundStyle(.tertiary)
-                        }
-                        if let airDate = episode.formattedAirDate {
-                            Text(airDate)
-                                .font(.system(size: 10))
-                                .foregroundStyle(.tertiary)
-                        }
+                    .transition(.fade(duration: 0.2))
+                    .allowsHitTesting(false)
+                } else {
+                    VStack(spacing: 6) {
+                        Image(systemName: "play.rectangle.fill")
+                            .font(.system(size: 24))
+                            .foregroundStyle(.white.opacity(0.7))
+                        Text("S\(episode.seasonNumber), E\(episode.episodeNumber)")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.75))
                     }
                 }
 
-                Spacer(minLength: 0)
+                Rectangle()
+                    .fill(.ultraThinMaterial)
+                    .frame(height: 96)
+                    .mask(
+                        LinearGradient(
+                            stops: [
+                                .init(color: .clear, location: 0.0),
+                                .init(color: .black.opacity(0.85), location: 0.4),
+                                .init(color: .black, location: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
 
-                Image(systemName: isWatched ? "checkmark.circle.fill" : "checkmark.circle")
-                    .font(.body)
-                    .foregroundStyle(isWatched ? .green : .secondary)
+                LinearGradient(
+                    colors: [.clear, .black.opacity(0.5)],
+                    startPoint: .center,
+                    endPoint: .bottom
+                )
+
+                HStack(alignment: .bottom, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(episode.name.isEmpty ? "Episode \(episode.episodeNumber)" : episode.name)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .minimumScaleFactor(0.9)
+
+                        Text(episodeMetaLine(for: episode))
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.78))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    Image(systemName: isWatched ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 18, weight: .light))
+                        .foregroundStyle(isWatched ? .gray : .white.opacity(0.9))
+                        .padding(.bottom, 2)
+                }
+                .padding(16)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(AppTheme.adaptiveCardBackground(colorScheme))
-            .clipShape(.rect(cornerRadius: 8))
+            .frame(width: cardWidth, height: 190)
+            .clipShape(Squircle(cornerRadius: 24))
+            .overlay(
+                Squircle(cornerRadius: 24)
+                    .stroke(.white.opacity(colorScheme == .dark ? 0.25 : 0.18), lineWidth: 1)
+            )
         }
         .buttonStyle(.plain)
+    }
+
+    private func seasonWatchedCount(_ season: Season) -> Int {
+        let seasonPrefix = "s\(season.seasonNumber)e"
+        return mediaService.watchedEpisodeKeys(mediaId: currentItem.id)
+            .filter { $0.hasPrefix(seasonPrefix) }
+            .count
+    }
+
+    private func toggleSeasonWatched(_ season: Season, isSeasonWatched: Bool) {
+        if isSeasonWatched {
+            mediaService.unmarkSeasonWatched(
+                mediaId: currentItem.id,
+                seasonNumber: season.seasonNumber,
+                episodeCount: season.episodeCount
+            )
+        } else {
+            mediaService.markSeasonWatched(
+                mediaId: currentItem.id,
+                seasonNumber: season.seasonNumber,
+                episodeCount: season.episodeCount,
+                totalEpisodes: totalEpisodesCount
+            )
+        }
+    }
+
+    private func displaySeasonTitle(_ season: Season) -> String {
+        let cleaned = season.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleaned.isEmpty ? "Season \(season.seasonNumber)" : cleaned
+    }
+
+    private func episodeMetaLine(for episode: Episode) -> String {
+        var parts: [String] = ["S\(episode.seasonNumber), E\(episode.episodeNumber)"]
+        if let date = compactEpisodeDate(episode.airDate) {
+            parts.append(date)
+        }
+        if let runtime = episode.formattedRuntime {
+            parts.append(runtime)
+        }
+        return parts.joined(separator: " • ")
+    }
+
+    private func compactEpisodeDate(_ rawDate: String?) -> String? {
+        guard let rawDate, !rawDate.isEmpty else { return nil }
+
+        let parser = DateFormatter()
+        parser.locale = Locale(identifier: "en_US_POSIX")
+        parser.dateFormat = "yyyy-MM-dd"
+        guard let date = parser.date(from: rawDate) else { return nil }
+
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "MMM dd yyyy"
+        return formatter.string(from: date)
     }
 
     // MARK: - Overview & Genres
@@ -498,6 +574,10 @@ struct DetailView: View {
                 seasons = []
             }
 
+            if expandedSeason == nil || !seasons.contains(where: { $0.seasonNumber == expandedSeason }) {
+                expandedSeason = seasons.first?.seasonNumber
+            }
+
             isLoadingSeasons = false
             return
         }
@@ -527,6 +607,13 @@ struct DetailView: View {
             }
         } catch {
             // Silently fail
+        }
+
+        if expandedSeason == nil || !seasons.contains(where: { $0.seasonNumber == expandedSeason }) {
+            expandedSeason = seasons.first?.seasonNumber
+        }
+        if let selectedSeason, selectedSeason.episodes.isEmpty {
+            loadEpisodesForSeason(selectedSeason.seasonNumber)
         }
 
         isLoadingSeasons = false

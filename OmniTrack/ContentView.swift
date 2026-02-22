@@ -1,28 +1,34 @@
 import SwiftUI
 
+enum AppTab: Hashable {
+    case home
+    case discover
+    case library
+    case profile
+}
+
 struct ContentView: View {
     @Environment(\.colorScheme) private var colorScheme
+    @State private var selectedTab: AppTab = .home
 
     var body: some View {
-        TabView {
-            Tab("Home", systemImage: "house.fill") {
-                HomeView()
+        TabView(selection: $selectedTab) {
+            Tab("Home", systemImage: "house.fill", value: AppTab.home) {
+                HomeView(onExplore: {
+                    selectedTab = .discover
+                })
             }
 
-            Tab("Discover", systemImage: "safari.fill") {
+            Tab("Discover", systemImage: "safari.fill", value: AppTab.discover) {
                 DiscoverView()
             }
 
-            Tab("Library", systemImage: "books.vertical.fill") {
+            Tab("Library", systemImage: "books.vertical.fill", value: AppTab.library) {
                 LibraryView()
             }
 
-            Tab("Stats", systemImage: "chart.bar.fill") {
+            Tab("Profile", systemImage: "chart.bar.fill", value: AppTab.profile) {
                 StatsView()
-            }
-
-            Tab("Settings", systemImage: "gearshape.fill") {
-                SettingsView()
             }
         }
         .tint(colorScheme == .dark ? .white : .primary)

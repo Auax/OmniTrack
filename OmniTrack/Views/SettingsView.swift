@@ -95,6 +95,8 @@ struct SettingsView: View {
                     .tint(.secondary)
                 } header: {
                     Text("Ratings")
+                } footer: {
+                    Text("Anime ratings are always sourced from AniList.")
                 }
 
                 Section {

@@ -23,7 +23,7 @@ struct Episode: Identifiable {
 
     var stillURL: URL? {
         guard let path = stillPath else { return nil }
-        return URL(string: "https://image.tmdb.org/t/p/w300\(path)")
+        return URL(string: "https://image.tmdb.org/t/p/w780\(path)")
     }
 
     var episodeKey: String {

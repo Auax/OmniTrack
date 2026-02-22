@@ -1,6 +1,5 @@
 import SwiftUI
 import SDWebImageSwiftUI
-import SDWebImageSwiftUI
 
 struct LibraryView: View {
     @Environment(MediaService.self) private var mediaService
@@ -15,7 +14,7 @@ struct LibraryView: View {
     @State private var searchText: String = ""
 
     enum LibraryTab: String, CaseIterable {
-        case queue = "Queue"
+        case queue = "Watchlist"
         case watched = "Watched"
 
         var emptyIcon: String {
@@ -27,14 +26,14 @@ struct LibraryView: View {
 
         var emptyTitle: String {
             switch self {
-            case .queue: "Your Queue is Empty"
+            case .queue: "Your Watchlist is Empty"
             case .watched: "Nothing Watched Yet"
             }
         }
 
         var emptyDescription: String {
             switch self {
-            case .queue: "Swipe left on any title or tap Add to Queue to save it here."
+            case .queue: "Swipe left on any title or tap Add to Watchlist to save it here."
             case .watched: "Mark titles as watched to keep track of what you've seen."
             }
         }
@@ -45,8 +44,11 @@ struct LibraryView: View {
     }
 
     private var availableTypes: [MediaType] {
-        let types = Set(baseItems.map { $0.type })
-        return [.movie, .tvShow, .anime].filter { types.contains($0) }
+        var types: [MediaType] = []
+        if settings.showMovies { types.append(.movie) }
+        if settings.showTVShows { types.append(.tvShow) }
+        if settings.showAnime { types.append(.anime) }
+        return types
     }
 
     private var availableGenres: [String] {
@@ -75,15 +77,37 @@ struct LibraryView: View {
         return items
     }
 
+    private var hasActiveFilters: Bool {
+        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || selectedType != nil
+            || selectedGenre != nil
+    }
+
     var body: some View {
         NavigationStack {
             Group {
                 if currentItems.isEmpty {
-                    ContentUnavailableView(
-                        selectedTab.emptyTitle,
-                        systemImage: selectedTab.emptyIcon,
-                        description: Text(selectedTab.emptyDescription)
-                    )
+                    Group {
+                        if baseItems.isEmpty {
+                            ContentUnavailableView(
+                                selectedTab.emptyTitle,
+                                systemImage: selectedTab.emptyIcon,
+                                description: Text(selectedTab.emptyDescription)
+                            )
+                        } else if hasActiveFilters {
+                            ContentUnavailableView(
+                                "No Matching Titles",
+                                systemImage: "line.3.horizontal.decrease.circle",
+                                description: Text("Try adjusting your filters or search.")
+                            )
+                        } else {
+                            ContentUnavailableView(
+                                selectedTab.emptyTitle,
+                                systemImage: selectedTab.emptyIcon,
+                                description: Text(selectedTab.emptyDescription)
+                            )
+                        }
+                    }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     ScrollView {
@@ -102,7 +126,7 @@ struct LibraryView: View {
                                     }
                                 }
                                 .background(AppTheme.adaptiveCardBackground(colorScheme))
-                                .clipShape(.rect(cornerRadius: 16))
+                                .clipShape(Squircle(cornerRadius: 16))
                                 .shadow(color: .black.opacity(colorScheme == .dark ? 0.3 : 0.06), radius: 6, y: 3)
                             }
                         }
@@ -142,12 +166,41 @@ struct LibraryView: View {
     }
 
     private var tabSelector: some View {
-        Picker("", selection: $selectedTab) {
+        HStack(spacing: 6) {
             ForEach(LibraryTab.allCases, id: \.self) { tab in
-                Text(tab.rawValue).tag(tab)
+                Button {
+                    withAnimation(.snappy) {
+                        selectedTab = tab
+                    }
+                } label: {
+                    Text(tab.rawValue)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(selectedTab == tab ? Color.primary : Color.secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(
+                            Capsule()
+                                .fill(selectedTab == tab ? Color.accentColor.opacity(colorScheme == .dark ? 0.22 : 0.14) : Color.clear)
+                        )
+                        .overlay(
+                            Capsule()
+                                .stroke(
+                                    selectedTab == tab
+                                        ? Color.accentColor.opacity(colorScheme == .dark ? 0.30 : 0.22)
+                                        : Color.clear,
+                                    lineWidth: 1
+                                )
+                        )
+                }
+                .buttonStyle(.plain)
             }
         }
-        .pickerStyle(.segmented)
+        .padding(6)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay(
+            Capsule()
+                .stroke(Color.primary.opacity(colorScheme == .dark ? 0.2 : 0.14), lineWidth: 1)
+        )
         .padding(.horizontal, 16)
         .padding(.top, 8)
         .padding(.bottom, 12)
@@ -157,37 +210,48 @@ struct LibraryView: View {
 
     private var filterMenu: some View {
         Menu {
-            if availableTypes.count > 1 {
-                Section("Type") {
-                    Button {
-                        withAnimation(.snappy) { selectedType = nil; selectedGenre = nil }
-                    } label: {
-                        Label("All Types", systemImage: selectedType == nil ? "checkmark" : "")
+            Section("Type") {
+                Button {
+                    withAnimation(.snappy) {
+                        selectedType = nil
+                        selectedGenre = nil
                     }
-                    
-                    ForEach(availableTypes) { type in
-                        Button {
-                            withAnimation(.snappy) { selectedType = type; selectedGenre = nil }
-                        } label: {
-                            Label(type.rawValue, systemImage: selectedType == type ? "checkmark" : "")
+                } label: {
+                    filterMenuLabel("All Types", isSelected: selectedType == nil)
+                }
+
+                ForEach(availableTypes) { type in
+                    Button {
+                        withAnimation(.snappy) {
+                            selectedType = selectedType == type ? nil : type
+                            selectedGenre = nil
                         }
+                    } label: {
+                        filterMenuLabel(type.rawValue, isSelected: selectedType == type)
                     }
                 }
             }
 
-            if !availableGenres.isEmpty {
-                Section("Genre") {
-                    Button {
-                        withAnimation(.snappy) { selectedGenre = nil }
-                    } label: {
-                        Label("All Genres", systemImage: selectedGenre == nil ? "checkmark" : "")
+            Section("Genre") {
+                Button {
+                    withAnimation(.snappy) {
+                        selectedGenre = nil
                     }
-                    
+                } label: {
+                    filterMenuLabel("All Genres", isSelected: selectedGenre == nil)
+                }
+
+                if availableGenres.isEmpty {
+                    Button("No genres available") {}
+                        .disabled(true)
+                } else {
                     ForEach(availableGenres, id: \.self) { genre in
                         Button {
-                            withAnimation(.snappy) { selectedGenre = selectedGenre == genre ? nil : genre }
+                            withAnimation(.snappy) {
+                                selectedGenre = selectedGenre == genre ? nil : genre
+                            }
                         } label: {
-                            Label(genre, systemImage: selectedGenre == genre ? "checkmark" : "")
+                            filterMenuLabel(genre, isSelected: selectedGenre == genre)
                         }
                     }
                 }
@@ -198,6 +262,15 @@ struct LibraryView: View {
                 .foregroundStyle(selectedType != nil || selectedGenre != nil ? Color.accentColor : Color.primary)
                 .padding(8)
                 .contentShape(Rectangle())
+        }
+    }
+
+    @ViewBuilder
+    private func filterMenuLabel(_ title: String, isSelected: Bool) -> some View {
+        if isSelected {
+            Label(title, systemImage: "checkmark")
+        } else {
+            Text(title)
         }
     }
 
@@ -301,35 +374,47 @@ struct LibraryView: View {
             .allowsHitTesting(false)
         }
         .frame(width: 70, height: 100)
-        .clipShape(.rect(cornerRadius: 10))
+        .clipShape(Squircle(cornerRadius: 10))
     }
 
     // MARK: - Next Up Badge
 
     @ViewBuilder
     private func nextUpBadge(_ item: MediaItem) -> some View {
-        let nextEp = nextUpEpisode(for: item)
+        let info = nextUpEpisodeInfo(for: item)
+        let isCompleted = info.key == nil
+
         HStack(spacing: 5) {
-            Image(systemName: "play.circle.fill")
+            Image(systemName: isCompleted ? "checkmark.circle.fill" : "play.circle.fill")
                 .font(.system(size: 12))
-                .foregroundStyle(.blue)
-            Text("Next Up:")
+                .foregroundStyle(isCompleted ? .green : .blue)
+            Text(isCompleted ? "Completed:" : "Next Up:")
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.blue)
-            Text(nextEp)
+                .foregroundStyle(isCompleted ? .green : .blue)
+            Text(info.label)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.primary)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(.blue.opacity(0.08))
+        .background((isCompleted ? Color.green : Color.blue).opacity(0.08))
         .clipShape(Capsule())
     }
 
-    private func nextUpEpisode(for item: MediaItem) -> String {
+    private func nextUpEpisodeInfo(for item: MediaItem) -> (key: String?, label: String) {
+        if item.isWatched {
+            return (nil, "All Episodes")
+        }
+
+        let totalEpisodes = item.totalEpisodes ?? 0
+        let watchedCount = mediaService.watchedEpisodeCount(mediaId: item.id)
+        if totalEpisodes > 0, watchedCount >= totalEpisodes {
+            return (nil, "All Episodes")
+        }
+
         let watchedKeys = mediaService.watchedEpisodeKeys(mediaId: item.id)
         if watchedKeys.isEmpty {
-            return "S1:E1"
+            return ("s1e1", "S1:E1")
         }
 
         // Parse all watched episode keys to find the latest
@@ -343,13 +428,11 @@ struct LibraryView: View {
             }
         }
 
-        return "S\(maxSeason):E\(maxEpisode + 1)"
-    }
-
-    // MARK: - Rating
-
-    private func ratingRow(_ item: MediaItem) -> some View {
-        RatingView(item: item, fontSize: 12, starSize: 10)
+        let nextEpisode = maxEpisode + 1
+        if totalEpisodes > 0, watchedCount + 1 > totalEpisodes {
+            return (nil, "All Episodes")
+        }
+        return ("s\(maxSeason)e\(nextEpisode)", "S\(maxSeason):E\(nextEpisode)")
     }
 
     // MARK: - Episode Progress Badge
@@ -413,7 +496,7 @@ struct LibraryView: View {
                             .foregroundStyle(selectedTab == .queue ? .orange : .green)
                             .font(.caption)
 
-                        Text("\(episodeKeys.count) episode\(episodeKeys.count == 1 ? "" : "s") \(selectedTab == .queue ? "in queue" : "watched")")
+                        Text("\(episodeKeys.count) episode\(episodeKeys.count == 1 ? "" : "s") \(selectedTab == .queue ? "in watchlist" : "watched")")
                             .font(.caption.weight(.medium))
 
                         Spacer()
@@ -508,7 +591,7 @@ struct LibraryView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(AppTheme.adaptiveSecondary(colorScheme))
-        .clipShape(.rect(cornerRadius: 8))
+        .clipShape(Squircle(cornerRadius: 8))
         .padding(.horizontal, 8)
         .padding(.bottom, 2)
     }
@@ -519,20 +602,22 @@ struct LibraryView: View {
         VStack(spacing: 8) {
             if selectedTab == .queue {
                 if item.hasSeasonsAndEpisodes {
-                    // For episodic queue items: mark next episode watched
-                    Button {
-                        withAnimation(.snappy) {
-                            let nextKey = nextUpEpisodeKey(for: item)
-                            mediaService.markEpisodeWatched(
-                                mediaId: item.id,
-                                key: nextKey,
-                                totalEpisodes: item.totalEpisodes ?? 0
-                            )
+                    let nextInfo = nextUpEpisodeInfo(for: item)
+                    if let nextKey = nextInfo.key {
+                        // For episodic queue items: mark next available episode watched
+                        Button {
+                            withAnimation(.snappy) {
+                                mediaService.markEpisodeWatched(
+                                    mediaId: item.id,
+                                    key: nextKey,
+                                    totalEpisodes: item.totalEpisodes ?? 0
+                                )
+                            }
+                        } label: {
+                            Image(systemName: "checkmark.circle")
+                                .font(.title3)
+                                .foregroundStyle(.green)
                         }
-                    } label: {
-                        Image(systemName: "checkmark.circle")
-                            .font(.title3)
-                            .foregroundStyle(.green)
                     }
                 } else if item.isInQueue {
                     Button {
@@ -561,36 +646,16 @@ struct LibraryView: View {
                             .foregroundStyle(.green)
                     }
                 }
-
-                Button {
-                    withAnimation(.snappy) { mediaService.addToQueue(item) }
-                } label: {
-                    Image(systemName: "bookmark")
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
-                }
             }
         }
     }
 
     // MARK: - Helpers
 
-    private func nextUpEpisodeKey(for item: MediaItem) -> String {
-        let watchedKeys = mediaService.watchedEpisodeKeys(mediaId: item.id)
-        if watchedKeys.isEmpty {
-            return "s1e1"
-        }
+    // MARK: - Rating
 
-        var maxSeason = 1
-        var maxEpisode = 0
-        for key in watchedKeys {
-            let parsed = parseEpisodeKey(key)
-            if parsed.season > maxSeason || (parsed.season == maxSeason && parsed.episode > maxEpisode) {
-                maxSeason = parsed.season
-                maxEpisode = parsed.episode
-            }
-        }
-        return "s\(maxSeason)e\(maxEpisode + 1)"
+    private func ratingRow(_ item: MediaItem) -> some View {
+        RatingView(item: item, fontSize: 12, starSize: 10)
     }
 
     private func parseEpisodeKey(_ key: String) -> (season: Int, episode: Int) {
