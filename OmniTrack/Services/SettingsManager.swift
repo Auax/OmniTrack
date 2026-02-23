@@ -4,19 +4,37 @@ import SDWebImage
 @Observable
 class SettingsManager {
     var showMovies: Bool {
-        didSet { UserDefaults.standard.set(showMovies, forKey: "showMovies") }
+        didSet {
+            if !showMovies && !showTVShows && !showAnime {
+                showMovies = oldValue
+            }
+            UserDefaults.standard.set(showMovies, forKey: "showMovies")
+        }
     }
     var showTVShows: Bool {
-        didSet { UserDefaults.standard.set(showTVShows, forKey: "showTVShows") }
+        didSet {
+            if !showMovies && !showTVShows && !showAnime {
+                showTVShows = oldValue
+            }
+            UserDefaults.standard.set(showTVShows, forKey: "showTVShows")
+        }
     }
     var showAnime: Bool {
-        didSet { UserDefaults.standard.set(showAnime, forKey: "showAnime") }
+        didSet {
+            if !showMovies && !showTVShows && !showAnime {
+                showAnime = oldValue
+            }
+            UserDefaults.standard.set(showAnime, forKey: "showAnime")
+        }
     }
     var themeMode: ThemeMode {
         didSet { UserDefaults.standard.set(themeMode.rawValue, forKey: "themeMode") }
     }
     var ratingProvider: RatingProvider {
         didSet { UserDefaults.standard.set(ratingProvider.rawValue, forKey: "ratingProvider") }
+    }
+    var animeSource: AnimeSource {
+        didSet { UserDefaults.standard.set(animeSource.rawValue, forKey: "animeSource") }
     }
     var animeTitlePreference: AnimeTitlePreference {
         didSet { UserDefaults.standard.set(animeTitlePreference.rawValue, forKey: "animeTitlePreference") }
@@ -54,6 +72,8 @@ class SettingsManager {
         self.themeMode = ThemeMode(rawValue: rawTheme) ?? .system
         let rawRating = defaults.string(forKey: "ratingProvider") ?? RatingProvider.imdb.rawValue
         self.ratingProvider = RatingProvider(rawValue: rawRating) ?? .imdb
+        let rawAnimeSource = defaults.string(forKey: "animeSource") ?? AnimeSource.aniList.rawValue
+        self.animeSource = AnimeSource(rawValue: rawAnimeSource) ?? .aniList
         let rawAnimeTitle = defaults.string(forKey: "animeTitlePreference") ?? AnimeTitlePreference.romaji.rawValue
         self.animeTitlePreference = AnimeTitlePreference(rawValue: rawAnimeTitle) ?? .romaji
         let rawCache = defaults.string(forKey: "imageCacheDuration") ?? ImageCacheDuration.oneWeek.rawValue
@@ -69,6 +89,20 @@ class SettingsManager {
         cache.config.maxDiskAge = imageCacheDuration.timeInterval
         // Optional: Set a reasonable disk size limit (e.g. 500 MB)
         cache.config.maxDiskSize = 1024 * 1024 * 500
+    }
+}
+
+nonisolated enum AnimeSource: String, CaseIterable, Sendable, Identifiable {
+    case aniList = "AniList"
+    case tmdb = "TMDB"
+
+    var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .aniList: "sparkles.tv"
+        case .tmdb: "film"
+        }
     }
 }
 

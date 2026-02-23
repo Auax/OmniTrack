@@ -484,10 +484,10 @@ struct DrillDownListView: View {
     }
 
     private func ratingIcon(for item: MediaItem) -> String {
-        item.isAniListAnime ? "a.circle.fill" : "star.fill"
+        "star.fill"
     }
 
     private func ratingIconColor(for item: MediaItem) -> Color {
-        item.isAniListAnime ? item.animeRatingIconColor : .yellow
+        .yellow
     }
 }

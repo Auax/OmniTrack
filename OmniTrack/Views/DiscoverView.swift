@@ -18,29 +18,8 @@ struct DiscoverView: View {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    var activeTypes: [MediaType] {
-        var types: [MediaType] = []
-        if settings.showMovies { types.append(.movie) }
-        if settings.showTVShows { types.append(.tvShow) }
-        if settings.showAnime { types.append(.anime) }
-        return types
-    }
-
     var availableGenres: [String] {
-        Array(Set(mediaService.genreMap.values)).sorted()
-    }
-
-    private var highlightedGenres: [String] {
-        let preferred = ["Action", "Drama", "Comedy", "Animation", "Sci-Fi", "Fantasy", "Thriller", "Adventure", "Crime", "Mystery"]
-        var result = preferred.filter { availableGenres.contains($0) }
-        let remaining = availableGenres.filter { !result.contains($0) }
-        result.append(contentsOf: remaining.prefix(max(0, 10 - result.count)))
-
-        if let selectedGenre, !result.contains(selectedGenre) {
-            result.insert(selectedGenre, at: 0)
-        }
-
-        return result
+        mediaService.discoverGenreNames(includeAniListGenres: settings.animeSource == .aniList)
     }
 
     private var trendingPreviewItems: [MediaItem] {
@@ -63,12 +42,9 @@ struct DiscoverView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
-                    Section {
-                        discoverContent
-                    } header: {
-                        stickyFilterPillsHeader
-                    }
+                VStack(alignment: .leading, spacing: 0) {
+                    discoverControls
+                    discoverContent
                 }
             }
             .background(AppTheme.adaptiveBackground(colorScheme))
@@ -89,6 +65,13 @@ struct DiscoverView: View {
             .onChange(of: selectedType) { _, _ in loadData(reset: true) }
             .onChange(of: selectedCatalog) { _, _ in loadData(reset: true) }
             .onChange(of: selectedGenre) { _, _ in loadData(reset: true) }
+            .onChange(of: settings.animeSource) { _, _ in
+                selectedGenre = nil
+                loadData(reset: true)
+            }
+            .onChange(of: settings.animeTitlePreference) { _, _ in
+                loadData(reset: true)
+            }
             .onChange(of: searchText) { _, _ in
                 searchTask?.cancel()
                 searchTask = Task {
@@ -100,70 +83,78 @@ struct DiscoverView: View {
         }
     }
 
-    private var stickyFilterPillsHeader: some View {
-        VStack(spacing: 8) {
-            ScrollView(.horizontal) {
-                HStack(spacing: 8) {
-                    FilterChipView(
-                        title: "All",
-                        icon: "square.grid.2x2",
-                        isSelected: selectedType == nil,
-                        action: {
-                            withAnimation(.snappy) {
-                                selectedType = nil
-                            }
-                        }
-                    )
-
-                    ForEach(activeTypes) { type in
-                        FilterChipView(
-                            title: type.rawValue,
-                            icon: type.icon,
-                            isSelected: selectedType == type,
-                            action: {
-                                withAnimation(.snappy) {
-                                    selectedType = type
-                                }
-                            }
-                        )
-                    }
-                }
+    private var discoverControls: some View {
+        VStack(spacing: 12) {
+            Picker("Media Category", selection: $selectedType) {
+                Text("All").tag(nil as MediaType?)
+                Text("Movies").tag(Optional(MediaType.movie))
+                Text("TV Shows").tag(Optional(MediaType.tvShow))
+                Text("Anime").tag(Optional(MediaType.anime))
             }
-            .contentMargins(.horizontal, 16)
-            .scrollIndicators(.hidden)
+            .pickerStyle(.segmented)
 
-            ScrollView(.horizontal) {
-                HStack(spacing: 8) {
-                    FilterChipView(
-                        title: "All Genres",
-                        icon: "tag",
-                        isSelected: selectedGenre == nil,
-                        action: {
-                            withAnimation(.snappy) {
-                                selectedGenre = nil
-                            }
-                        }
-                    )
-
-                    ForEach(highlightedGenres, id: \.self) { genre in
-                        FilterChipView(
-                            title: genre,
-                            icon: "tag.fill",
-                            isSelected: selectedGenre == genre,
-                            action: {
-                                withAnimation(.snappy) {
-                                    selectedGenre = selectedGenre == genre ? nil : genre
-                                }
-                            }
-                        )
+            HStack(spacing: 10) {
+                Menu {
+                    Button("All Genres") {
+                        selectedGenre = nil
                     }
+
+                    ForEach(availableGenres, id: \.self) { genre in
+                        Button(genre) {
+                            selectedGenre = genre
+                        }
+                    }
+                } label: {
+                    dropdownLabel(
+                        title: selectedGenre ?? "Genre",
+                        icon: "tag"
+                    )
                 }
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity)
+
+                Menu {
+                    ForEach(DiscoverCatalog.allCases) { catalog in
+                        Button(catalog.rawValue) {
+                            selectedCatalog = catalog
+                        }
+                    }
+                } label: {
+                    dropdownLabel(
+                        title: "Sort By: \(selectedCatalog.rawValue)",
+                        icon: "arrow.up.arrow.down"
+                    )
+                }
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity)
             }
-            .contentMargins(.horizontal, 16)
-            .scrollIndicators(.hidden)
         }
-        .padding(.top, 8)
-        .padding(.bottom, 10)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 20)
+    }
+
+    private func dropdownLabel(title: String, icon: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            Text(title)
+                .font(.footnote.weight(.medium))
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "chevron.down")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+        .foregroundStyle(.primary)
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, minHeight: 32, maxHeight: 32)
+        .background(Color(uiColor: .tertiarySystemFill), in: RoundedRectangle(cornerRadius: 32, style: .continuous))
+
     }
 
     @ViewBuilder
@@ -183,7 +174,7 @@ struct DiscoverView: View {
                     trendingSection
                 }
 
-                sectionHeader(isSearchingQuery ? "Results" : "Browse Catalog", icon: "square.grid.2x2")
+                sectionHeader(isSearchingQuery ? "Results" : "Browse Catalog")
                     .padding(.horizontal, 16)
                     .padding(.bottom, 8)
 
@@ -215,34 +206,37 @@ struct DiscoverView: View {
     private var trendingSection: some View {
         if !trendingPreviewItems.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
-                sectionHeader(spotlightTitle, icon: selectedCatalog == .new ? "sparkles" : "flame.fill")
+                sectionHeader(spotlightTitle)
                     .padding(.horizontal, 16)
 
-                ScrollView(.horizontal) {
-                    HStack(spacing: 14) {
-                        ForEach(trendingPreviewItems) { item in
-                            Button {
-                                selectedItem = item
-                            } label: {
-                                FeaturedCardView(item: item)
-                                    .frame(width: UIScreen.main.bounds.width - 72)
+                GeometryReader { proxy in
+                    let cardWidth = max(280, min(700, proxy.size.width - 56))
+
+                    ScrollView(.horizontal) {
+                        HStack(spacing: 14) {
+                            ForEach(trendingPreviewItems) { item in
+                                Button {
+                                    selectedItem = item
+                                } label: {
+                                    FeaturedCardView(item: item)
+                                        .frame(width: cardWidth)
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
                         }
                     }
+                    .contentMargins(.horizontal, 16)
+                    .scrollIndicators(.hidden)
+                    .scrollTargetBehavior(.viewAligned)
                 }
-                .contentMargins(.horizontal, 16)
-                .scrollIndicators(.hidden)
-                .scrollTargetBehavior(.viewAligned)
+                .frame(height: 220)
             }
-            .padding(.bottom, 16)
+            .padding(.bottom, 28)
         }
     }
 
-    private func sectionHeader(_ title: String, icon: String) -> some View {
+    private func sectionHeader(_ title: String) -> some View {
         HStack {
-            Image(systemName: icon)
-                .foregroundStyle(.secondary)
             Text(title)
                 .font(.title3.weight(.semibold))
             Spacer()

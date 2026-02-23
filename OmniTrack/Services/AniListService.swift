@@ -68,8 +68,36 @@ nonisolated enum AniListServiceError: Error {
     case graphQLError(String)
 }
 
+private actor AniListResponseCache {
+    private struct Entry {
+        let data: Data
+        let date: Date
+    }
+
+    private var entries: [String: Entry] = [:]
+    private let ttl: TimeInterval
+
+    init(ttl: TimeInterval = 60 * 10) {
+        self.ttl = ttl
+    }
+
+    func data(for key: String) -> Data? {
+        guard let entry = entries[key] else { return nil }
+        guard Date().timeIntervalSince(entry.date) <= ttl else {
+            entries[key] = nil
+            return nil
+        }
+        return entry.data
+    }
+
+    func set(_ data: Data, for key: String) {
+        entries[key] = Entry(data: data, date: Date())
+    }
+}
+
 nonisolated final class AniListService: Sendable {
     private let endpoint = URL(string: "https://graphql.anilist.co")!
+    private static let responseCache = AniListResponseCache()
 
     func fetchGenres() async throws -> [String] {
         let query = """
@@ -169,7 +197,12 @@ nonisolated final class AniListService: Sendable {
             "variables": variables
         ]
 
-        let payload = try JSONSerialization.data(withJSONObject: body)
+        let payload = try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
+        let cacheKey = payload.base64EncodedString()
+
+        if let cached = await Self.responseCache.data(for: cacheKey) {
+            return try JSONDecoder().decode(AniListGraphQLResponse<T>.self, from: cached)
+        }
 
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
@@ -178,6 +211,10 @@ nonisolated final class AniListService: Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
         let (data, _) = try await URLSession.shared.data(for: request)
-        return try JSONDecoder().decode(AniListGraphQLResponse<T>.self, from: data)
+        let decoded = try JSONDecoder().decode(AniListGraphQLResponse<T>.self, from: data)
+        if decoded.errors == nil {
+            await Self.responseCache.set(data, for: cacheKey)
+        }
+        return decoded
     }
 }

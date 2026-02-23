@@ -143,116 +143,149 @@ nonisolated struct TMDBGenre: Codable, Sendable {
     let name: String
 }
 
+private actor TMDBResponseCache {
+    private struct Entry {
+        let data: Data
+        let date: Date
+    }
+
+    private var entries: [String: Entry] = [:]
+    private let ttl: TimeInterval
+
+    init(ttl: TimeInterval = 60 * 10) {
+        self.ttl = ttl
+    }
+
+    func data(for key: String) -> Data? {
+        guard let entry = entries[key] else { return nil }
+        guard Date().timeIntervalSince(entry.date) <= ttl else {
+            entries[key] = nil
+            return nil
+        }
+        return entry.data
+    }
+
+    func set(_ data: Data, for key: String) {
+        entries[key] = Entry(data: data, date: Date())
+    }
+}
+
 nonisolated final class TMDBService: Sendable {
     private let apiKey: String
     private let baseURL = "https://api.themoviedb.org/3"
+    private static let responseCache = TMDBResponseCache()
 
     init(apiKey: String = Config.TMDB_API_KEY) {
         self.apiKey = apiKey
     }
 
+    private func fetchData(from url: URL) async throws -> Data {
+        let key = url.absoluteString
+        if let cached = await Self.responseCache.data(for: key) {
+            return cached
+        }
+
+        let (data, _) = try await URLSession.shared.data(from: url)
+        await Self.responseCache.set(data, for: key)
+        return data
+    }
+
+    private func fetchAndDecode<T: Decodable>(_ type: T.Type, from url: URL) async throws -> T {
+        let data = try await fetchData(from: url)
+        return try JSONDecoder().decode(type, from: data)
+    }
+
     func fetchTrendingMovies(page: Int = 1) async throws -> [TMDBMovie] {
         let url = URL(string: "\(baseURL)/trending/movie/week?api_key=\(apiKey)&language=en-US&page=\(page)")!
-        let (data, _) = try await URLSession.shared.data(from: url)
-        let response = try JSONDecoder().decode(TMDBMovieResponse.self, from: data)
+        let response = try await fetchAndDecode(TMDBMovieResponse.self, from: url)
         return response.results
     }
 
     func fetchPopularMovies(page: Int = 1) async throws -> [TMDBMovie] {
         let url = URL(string: "\(baseURL)/movie/popular?api_key=\(apiKey)&language=en-US&page=\(page)")!
-        let (data, _) = try await URLSession.shared.data(from: url)
-        let response = try JSONDecoder().decode(TMDBMovieResponse.self, from: data)
+        let response = try await fetchAndDecode(TMDBMovieResponse.self, from: url)
         return response.results
     }
 
     func fetchNowPlayingMovies(page: Int = 1) async throws -> [TMDBMovie] {
         let url = URL(string: "\(baseURL)/movie/now_playing?api_key=\(apiKey)&language=en-US&page=\(page)")!
-        let (data, _) = try await URLSession.shared.data(from: url)
-        let response = try JSONDecoder().decode(TMDBMovieResponse.self, from: data)
+        let response = try await fetchAndDecode(TMDBMovieResponse.self, from: url)
         return response.results
     }
 
     func fetchTrendingTV(page: Int = 1) async throws -> [TMDBTV] {
         let url = URL(string: "\(baseURL)/trending/tv/week?api_key=\(apiKey)&language=en-US&page=\(page)")!
-        let (data, _) = try await URLSession.shared.data(from: url)
-        let response = try JSONDecoder().decode(TMDBTVResponse.self, from: data)
+        let response = try await fetchAndDecode(TMDBTVResponse.self, from: url)
         return response.results
     }
 
     func fetchPopularTV(page: Int = 1) async throws -> [TMDBTV] {
         let url = URL(string: "\(baseURL)/tv/popular?api_key=\(apiKey)&language=en-US&page=\(page)")!
-        let (data, _) = try await URLSession.shared.data(from: url)
-        let response = try JSONDecoder().decode(TMDBTVResponse.self, from: data)
+        let response = try await fetchAndDecode(TMDBTVResponse.self, from: url)
         return response.results
     }
 
     func fetchOnTheAirTV(page: Int = 1) async throws -> [TMDBTV] {
         let url = URL(string: "\(baseURL)/tv/on_the_air?api_key=\(apiKey)&language=en-US&page=\(page)")!
-        let (data, _) = try await URLSession.shared.data(from: url)
-        let response = try JSONDecoder().decode(TMDBTVResponse.self, from: data)
+        let response = try await fetchAndDecode(TMDBTVResponse.self, from: url)
         return response.results
     }
 
-    func fetchAnime(page: Int = 1) async throws -> [TMDBTV] {
-        let url = URL(string: "\(baseURL)/discover/tv?api_key=\(apiKey)&language=en-US&page=\(page)&with_keywords=210024&sort_by=popularity.desc")!
-        let (data, _) = try await URLSession.shared.data(from: url)
-        let response = try JSONDecoder().decode(TMDBTVResponse.self, from: data)
+    func fetchAnime(page: Int = 1, sortBy: String = "popularity.desc", genreId: Int? = nil) async throws -> [TMDBTV] {
+        var urlString = "\(baseURL)/discover/tv?api_key=\(apiKey)&language=en-US&page=\(page)&with_keywords=210024&sort_by=\(sortBy)"
+        if let genreId {
+            urlString += "&with_genres=\(genreId)"
+        }
+        let url = URL(string: urlString)!
+        let response = try await fetchAndDecode(TMDBTVResponse.self, from: url)
         return response.results
     }
 
     func fetchTVDetail(id: Int) async throws -> TMDBTVDetail {
         let url = URL(string: "\(baseURL)/tv/\(id)?api_key=\(apiKey)&language=en-US")!
-        let (data, _) = try await URLSession.shared.data(from: url)
-        return try JSONDecoder().decode(TMDBTVDetail.self, from: data)
+        return try await fetchAndDecode(TMDBTVDetail.self, from: url)
     }
 
     func fetchSeasonDetail(tvId: Int, seasonNumber: Int) async throws -> TMDBSeasonDetail {
         let url = URL(string: "\(baseURL)/tv/\(tvId)/season/\(seasonNumber)?api_key=\(apiKey)&language=en-US")!
-        let (data, _) = try await URLSession.shared.data(from: url)
-        return try JSONDecoder().decode(TMDBSeasonDetail.self, from: data)
+        return try await fetchAndDecode(TMDBSeasonDetail.self, from: url)
     }
 
     func fetchMovieGenres() async throws -> [TMDBGenre] {
         let url = URL(string: "\(baseURL)/genre/movie/list?api_key=\(apiKey)&language=en-US")!
-        let (data, _) = try await URLSession.shared.data(from: url)
-        let response = try JSONDecoder().decode(TMDBGenreList.self, from: data)
+        let response = try await fetchAndDecode(TMDBGenreList.self, from: url)
         return response.genres
     }
 
     func fetchTVGenres() async throws -> [TMDBGenre] {
         let url = URL(string: "\(baseURL)/genre/tv/list?api_key=\(apiKey)&language=en-US")!
-        let (data, _) = try await URLSession.shared.data(from: url)
-        let response = try JSONDecoder().decode(TMDBGenreList.self, from: data)
+        let response = try await fetchAndDecode(TMDBGenreList.self, from: url)
         return response.genres
     }
 
     func searchMovies(query: String, page: Int = 1) async throws -> [TMDBMovie] {
         let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
         let url = URL(string: "\(baseURL)/search/movie?api_key=\(apiKey)&language=en-US&query=\(encoded)&page=\(page)")!
-        let (data, _) = try await URLSession.shared.data(from: url)
-        let response = try JSONDecoder().decode(TMDBMovieResponse.self, from: data)
+        let response = try await fetchAndDecode(TMDBMovieResponse.self, from: url)
         return response.results
     }
 
     func searchTV(query: String, page: Int = 1) async throws -> [TMDBTV] {
         let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
         let url = URL(string: "\(baseURL)/search/tv?api_key=\(apiKey)&language=en-US&query=\(encoded)&page=\(page)")!
-        let (data, _) = try await URLSession.shared.data(from: url)
-        let response = try JSONDecoder().decode(TMDBTVResponse.self, from: data)
+        let response = try await fetchAndDecode(TMDBTVResponse.self, from: url)
         return response.results
     }
 
     func discoverMoviesByGenre(genreId: Int, page: Int = 1) async throws -> [TMDBMovie] {
         let url = URL(string: "\(baseURL)/discover/movie?api_key=\(apiKey)&language=en-US&page=\(page)&with_genres=\(genreId)&sort_by=popularity.desc")!
-        let (data, _) = try await URLSession.shared.data(from: url)
-        let response = try JSONDecoder().decode(TMDBMovieResponse.self, from: data)
+        let response = try await fetchAndDecode(TMDBMovieResponse.self, from: url)
         return response.results
     }
 
     func discoverTVByGenre(genreId: Int, page: Int = 1) async throws -> [TMDBTV] {
         let url = URL(string: "\(baseURL)/discover/tv?api_key=\(apiKey)&language=en-US&page=\(page)&with_genres=\(genreId)&sort_by=popularity.desc")!
-        let (data, _) = try await URLSession.shared.data(from: url)
-        let response = try JSONDecoder().decode(TMDBTVResponse.self, from: data)
+        let response = try await fetchAndDecode(TMDBTVResponse.self, from: url)
         return response.results
     }
 
@@ -260,21 +293,18 @@ nonisolated final class TMDBService: Sendable {
 
     func fetchMovieExternalIds(movieId: Int) async throws -> TMDBExternalIds {
         let url = URL(string: "\(baseURL)/movie/\(movieId)/external_ids?api_key=\(apiKey)")!
-        let (data, _) = try await URLSession.shared.data(from: url)
-        return try JSONDecoder().decode(TMDBExternalIds.self, from: data)
+        return try await fetchAndDecode(TMDBExternalIds.self, from: url)
     }
 
     func fetchTVExternalIds(tvId: Int) async throws -> TMDBExternalIds {
         let url = URL(string: "\(baseURL)/tv/\(tvId)/external_ids?api_key=\(apiKey)")!
-        let (data, _) = try await URLSession.shared.data(from: url)
-        return try JSONDecoder().decode(TMDBExternalIds.self, from: data)
+        return try await fetchAndDecode(TMDBExternalIds.self, from: url)
     }
 
     func fetchImdbRating(imdbId: String) async throws -> Double? {
         // Uses the free OMDB API (no key required for basic info via IMDB ID)
         let url = URL(string: "https://www.omdbapi.com/?i=\(imdbId)&apikey=\(Config.OMDB_API_KEY)")!
-        let (data, _) = try await URLSession.shared.data(from: url)
-        let response = try JSONDecoder().decode(OMDBResponse.self, from: data)
+        let response = try await fetchAndDecode(OMDBResponse.self, from: url)
         if let ratingStr = response.imdbRating, let rating = Double(ratingStr) {
             return rating
         }

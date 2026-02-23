@@ -1,11 +1,12 @@
 import SwiftUI
 
 struct SettingsView: View {
+    @Environment(MediaService.self) private var mediaService
     @Environment(SettingsManager.self) private var settings
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         @Bindable var settings = settings
+
         NavigationStack {
             List {
                 Section {
@@ -45,20 +46,14 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Toggle(isOn: $settings.showMovies) {
-                        Label("Movies", systemImage: "film")
+                    Picker(selection: $settings.animeSource) {
+                        ForEach(AnimeSource.allCases) { source in
+                            Text(source.rawValue)
+                                .tag(source)
+                        }
+                    } label: {
+                        Label("Anime API", systemImage: settings.animeSource.icon)
                     }
-                    .tint(.blue)
-                    
-                    Toggle(isOn: $settings.showTVShows) {
-                        Label("TV Shows", systemImage: "tv")
-                    }
-                    .tint(.blue)
-                    
-                    Toggle(isOn: $settings.showAnime) {
-                        Label("Anime", systemImage: "sparkles.tv")
-                    }
-                    .tint(.blue)
 
                     Picker(selection: $settings.animeTitlePreference) {
                         ForEach(AnimeTitlePreference.allCases) { option in
@@ -68,6 +63,7 @@ struct SettingsView: View {
                     } label: {
                         Label("Anime Titles", systemImage: settings.animeTitlePreference.icon)
                     }
+                    .disabled(settings.animeSource == .tmdb)
                     
                     Picker(selection: $settings.imageCacheDuration) {
                         ForEach(ImageCacheDuration.allCases) { duration in
@@ -80,7 +76,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Content")
                 } footer: {
-                    Text("Choose media types, anime title language, and how long images are saved offline.")
+                    Text("Choose anime source, anime title language, and how long images are saved offline.")
                 }
 
                 Section {
@@ -96,7 +92,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Ratings")
                 } footer: {
-                    Text("Anime ratings are always sourced from AniList.")
+                    Text("Movies and TV follow the selected rating provider. Anime ratings depend on the selected Anime API.")
                 }
 
                 Section {
@@ -123,6 +119,22 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .onChange(of: settings.animeSource) { _, _ in
+                reloadMediaData()
+            }
+            .onChange(of: settings.animeTitlePreference) { _, _ in
+                reloadMediaData()
+            }
+        }
+    }
+
+    private func reloadMediaData() {
+        Task {
+            await mediaService.loadContent(
+                showMovies: settings.showMovies,
+                showTVShows: settings.showTVShows,
+                showAnime: settings.showAnime
+            )
         }
     }
 }

@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		045F63FA306CF771C19C2F4A /* ProgressRingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 292FBA7B43F81EE05E16C9FC /* ProgressRingView.swift */; };
 		0727B81FAC0CDD53FEECEB6E /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A648797F7D8B2A78F6D88C33 /* LibraryView.swift */; };
+		09DE69D22F4CD5AC0071CF4D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 09DE69D12F4CD5AC0071CF4D /* Assets.xcassets */; };
 		0A28E9EA1C43C382C9C6BE00 /* StatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20E9414CC12AF673E61F81D7 /* StatsView.swift */; };
 		29A5B2BBE6D6975427022DF5 /* MediaCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 777BD0BE3F0619191D9AF42B /* MediaCardView.swift */; };
 		2F3863658B22B0C6DC33D7ED /* Episode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BF50E5E9B0165415F9EAAA4 /* Episode.swift */; };
@@ -41,6 +42,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		09DE69D12F4CD5AC0071CF4D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		0EBC944172ECD532EE35D166 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		0EF2ED21B9EFFC8D0FD8CC6B /* Color+Hex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Color+Hex.swift"; sourceTree = "<group>"; };
 		0F3D7BC652F032BE5460625B /* MediaService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaService.swift; sourceTree = "<group>"; };
@@ -88,7 +90,7 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		09F77E732F4B238E005734D2 /* Products */ = {
+		09DE69CF2F4CBFD20071CF4D /* Products */ = {
 			isa = PBXGroup;
 			name = Products;
 			sourceTree = "<group>";
@@ -172,6 +174,7 @@
 		DB3C11F25D2FF57C98E1C7BB = {
 			isa = PBXGroup;
 			children = (
+				09DE69D12F4CD5AC0071CF4D /* Assets.xcassets */,
 				54DF83F7698C8906B53DCCA8 /* Models */,
 				9B1F5DF9D824EEEC197287CE /* OmniTrack */,
 				433098A48E9332AE74C97C7C /* Services */,
@@ -229,7 +232,7 @@
 			projectDirPath = "";
 			projectReferences = (
 				{
-					ProductGroup = 09F77E732F4B238E005734D2 /* Products */;
+					ProductGroup = 09DE69CF2F4CBFD20071CF4D /* Products */;
 					ProjectRef = 39B8E29EF49AEA8479CF47DC /* OmniTrack.xcodeproj */;
 				},
 			);
@@ -245,6 +248,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				09DE69D22F4CD5AC0071CF4D /* Assets.xcassets in Resources */,
 				C4B8D0FBB5C29B8C7F69CB28 /* OmniTrack.xcodeproj in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -296,22 +300,10 @@
 			baseConfigurationReference = 3B1B404C83A78E0D7B9B8620 /* Config.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-					CODE_SIGN_IDENTITY = "iPhone Developer";
-					DEVELOPMENT_TEAM = L2DN68LPS5;
-					INFOPLIST_FILE = Info.plist;
-					INFOPLIST_KEY_UISupportedInterfaceOrientations = (
-						UIInterfaceOrientationPortrait,
-						UIInterfaceOrientationLandscapeLeft,
-						UIInterfaceOrientationLandscapeRight,
-						UIInterfaceOrientationPortraitUpsideDown,
-					);
-					INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = (
-						UIInterfaceOrientationPortrait,
-						UIInterfaceOrientationPortraitUpsideDown,
-						UIInterfaceOrientationLandscapeLeft,
-						UIInterfaceOrientationLandscapeRight,
-					);
-					IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = L2DN68LPS5;
+				INFOPLIST_FILE = Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -382,22 +374,10 @@
 			baseConfigurationReference = 3B1B404C83A78E0D7B9B8620 /* Config.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-					CODE_SIGN_IDENTITY = "iPhone Developer";
-					DEVELOPMENT_TEAM = L2DN68LPS5;
-					INFOPLIST_FILE = Info.plist;
-					INFOPLIST_KEY_UISupportedInterfaceOrientations = (
-						UIInterfaceOrientationPortrait,
-						UIInterfaceOrientationLandscapeLeft,
-						UIInterfaceOrientationLandscapeRight,
-						UIInterfaceOrientationPortraitUpsideDown,
-					);
-					INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = (
-						UIInterfaceOrientationPortrait,
-						UIInterfaceOrientationPortraitUpsideDown,
-						UIInterfaceOrientationLandscapeLeft,
-						UIInterfaceOrientationLandscapeRight,
-					);
-					IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = L2DN68LPS5;
+				INFOPLIST_FILE = Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

@@ -27,8 +27,8 @@ struct ContentView: View {
                 LibraryView()
             }
 
-            Tab("Profile", systemImage: "chart.bar.fill", value: AppTab.profile) {
-                StatsView()
+            Tab("Profile", systemImage: "person.crop.circle.fill", value: AppTab.profile) {
+                ProfileView()
             }
         }
         .tint(colorScheme == .dark ? .white : .primary)

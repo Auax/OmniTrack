@@ -136,6 +136,13 @@ class MediaService {
         return genreMap[id]
     }
 
+    func discoverGenreNames(includeAniListGenres: Bool) -> [String] {
+        let filteredGenres = genreMap.filter { key, _ in
+            includeAniListGenres || key < aniListGenreBaseId
+        }
+        return Array(Set(filteredGenres.values)).sorted()
+    }
+
     private func tmdbGenreId(from id: Int?) -> Int? {
         guard let id, id < aniListGenreBaseId else { return nil }
         return id
@@ -154,6 +161,10 @@ class MediaService {
         shows.filter { !isLikelyAnimeTV($0) }
     }
 
+    private func filterAnimeTVShows(_ shows: [TMDBTV]) -> [TMDBTV] {
+        shows.filter { isLikelyAnimeTV($0) }
+    }
+
     private func containsJapaneseCharacters(in text: String) -> Bool {
         for scalar in text.unicodeScalars {
             switch scalar.value {
@@ -169,6 +180,30 @@ class MediaService {
     private var animeTitlePreference: AnimeTitlePreference {
         let raw = UserDefaults.standard.string(forKey: "animeTitlePreference") ?? AnimeTitlePreference.romaji.rawValue
         return AnimeTitlePreference(rawValue: raw) ?? .romaji
+    }
+
+    private var animeSource: AnimeSource {
+        let raw = UserDefaults.standard.string(forKey: "animeSource") ?? AnimeSource.aniList.rawValue
+        return AnimeSource(rawValue: raw) ?? .aniList
+    }
+
+    private var usesAniListAnimeSource: Bool {
+        animeSource == .aniList
+    }
+
+    private func mapTmdbAnimeCollection(_ animeShows: [TMDBTV]) -> [MediaItem] {
+        animeShows.map { mapTV($0, type: .anime) }
+    }
+
+    private func fetchTmdbAnime(page: Int, catalog: DiscoverCatalog, genreId: Int? = nil) async throws -> [TMDBTV] {
+        switch catalog {
+        case .popular:
+            return try await tmdbService.fetchAnime(page: page, sortBy: "popularity.desc", genreId: genreId)
+        case .new:
+            return try await tmdbService.fetchAnime(page: page, sortBy: "first_air_date.desc", genreId: genreId)
+        case .featured:
+            return try await tmdbService.fetchAnime(page: page, sortBy: "vote_average.desc", genreId: genreId)
+        }
     }
 
     private func canonicalAniListTitle(_ anime: AniListAnime) -> String {
@@ -403,7 +438,7 @@ class MediaService {
                 for g in tg { genreMap[g.id] = g.name }
             }
 
-            if showAnime {
+            if showAnime && usesAniListAnimeSource {
                 await ensureAniListGenresLoaded()
             }
 
@@ -432,11 +467,19 @@ class MediaService {
 
             if showAnime {
                 do {
-                    async let trendingAnime = aniListService.fetchTrendingAnime()
-                    async let popularAnime = aniListService.fetchPopularAnime()
-                    let (trendingList, popularList) = try await (trendingAnime, popularAnime)
-                    fAnime = Array(mapAniListAnimeCollection(trendingList).prefix(5))
-                    items.append(contentsOf: mapAniListAnimeCollection(popularList))
+                    if usesAniListAnimeSource {
+                        async let trendingAnime = aniListService.fetchTrendingAnime()
+                        async let popularAnime = aniListService.fetchPopularAnime()
+                        let (trendingList, popularList) = try await (trendingAnime, popularAnime)
+                        fAnime = Array(mapAniListAnimeCollection(trendingList).prefix(5))
+                        items.append(contentsOf: mapAniListAnimeCollection(popularList))
+                    } else {
+                        async let featuredAnimeList = fetchTmdbAnime(page: 1, catalog: .featured)
+                        async let popularAnimeList = fetchTmdbAnime(page: 1, catalog: .popular)
+                        let (featuredList, popularList) = try await (featuredAnimeList, popularAnimeList)
+                        fAnime = Array(mapTmdbAnimeCollection(featuredList).prefix(5))
+                        items.append(contentsOf: mapTmdbAnimeCollection(popularList))
+                    }
                 } catch {
                     fAnime = []
                 }
@@ -484,11 +527,20 @@ class MediaService {
             
             if showAnime && hasMoreAnime {
                 currentAnimePage += 1
-                if let animeList = try? await aniListService.fetchPopularAnime(page: currentAnimePage) {
-                    if animeList.isEmpty { hasMoreAnime = false }
-                    newItems.append(contentsOf: mapAniListAnimeCollection(animeList))
+                if usesAniListAnimeSource {
+                    if let animeList = try? await aniListService.fetchPopularAnime(page: currentAnimePage) {
+                        if animeList.isEmpty { hasMoreAnime = false }
+                        newItems.append(contentsOf: mapAniListAnimeCollection(animeList))
+                    } else {
+                        hasMoreAnime = false
+                    }
                 } else {
-                    hasMoreAnime = false
+                    if let animeList = try? await fetchTmdbAnime(page: currentAnimePage, catalog: .popular) {
+                        if animeList.isEmpty { hasMoreAnime = false }
+                        newItems.append(contentsOf: mapTmdbAnimeCollection(animeList))
+                    } else {
+                        hasMoreAnime = false
+                    }
                 }
             }
             
@@ -527,7 +579,7 @@ class MediaService {
                 for g in tg { genreMap[g.id] = g.name }
             }
 
-            if showAnime {
+            if showAnime && usesAniListAnimeSource {
                 await ensureAniListGenresLoaded()
             }
 
@@ -545,8 +597,14 @@ class MediaService {
             }
 
             if showAnime {
-                let animeItems = (try? await aniListService.searchAnime(query: query)) ?? []
-                results.append(contentsOf: mapAniListAnimeCollection(animeItems))
+                if usesAniListAnimeSource {
+                    let animeItems = (try? await aniListService.searchAnime(query: query)) ?? []
+                    results.append(contentsOf: mapAniListAnimeCollection(animeItems))
+                } else {
+                    let animeItems = try await tmdbService.searchTV(query: query)
+                    let filteredAnimeItems = filterAnimeTVShows(animeItems)
+                    results.append(contentsOf: mapTmdbAnimeCollection(filteredAnimeItems))
+                }
             }
 
             // Deduplicate, preserving existing allMedia state for watched/queue
@@ -598,35 +656,105 @@ class MediaService {
                 results.append(contentsOf: filteredTVItems.map { mapTV($0, type: .tvShow) })
             }
             if isAnime {
-                let animeItems = (try? await aniListService.searchAnime(
-                    query: query,
-                    page: page,
-                    genre: selectedGenreName
-                )) ?? []
-                results.append(contentsOf: mapAniListAnimeCollection(animeItems))
+                if usesAniListAnimeSource {
+                    let animeItems = (try? await aniListService.searchAnime(
+                        query: query,
+                        page: page,
+                        genre: selectedGenreName
+                    )) ?? []
+                    results.append(contentsOf: mapAniListAnimeCollection(animeItems))
+                } else {
+                    let animeItems = try await tmdbService.searchTV(query: query, page: page)
+                    var filteredAnimeItems = filterAnimeTVShows(animeItems)
+                    if let selectedTmdbGenreId {
+                        filteredAnimeItems = filteredAnimeItems.filter { $0.genreIds.contains(selectedTmdbGenreId) }
+                    }
+                    results.append(contentsOf: mapTmdbAnimeCollection(filteredAnimeItems))
+                }
             }
         } else if let gId = selectedTmdbGenreId {
-            if isMovie {
-                let movies = try await tmdbService.discoverMoviesByGenre(genreId: gId, page: page)
-                results.append(contentsOf: movies.map { mapMovie($0) })
+            switch catalog {
+            case .popular:
+                if isMovie {
+                    let movies = try await tmdbService.discoverMoviesByGenre(genreId: gId, page: page)
+                    results.append(contentsOf: movies.map { mapMovie($0) })
+                }
+                if isTV {
+                    let tvItems = try await tmdbService.discoverTVByGenre(genreId: gId, page: page)
+                    let filteredTVItems = filterTVShowsExcludingAnime(tvItems)
+                    results.append(contentsOf: filteredTVItems.map { mapTV($0, type: .tvShow) })
+                }
+                if isAnime {
+                    if usesAniListAnimeSource {
+                        let animeItems = (try? await aniListService.fetchPopularAnime(
+                            page: page,
+                            genre: selectedGenreName
+                        )) ?? []
+                        results.append(contentsOf: mapAniListAnimeCollection(animeItems))
+                    } else {
+                        let animeItems = try await fetchTmdbAnime(page: page, catalog: .popular, genreId: gId)
+                        results.append(contentsOf: mapTmdbAnimeCollection(animeItems))
+                    }
+                }
+            case .new:
+                if isMovie {
+                    let movies = try await tmdbService.fetchNowPlayingMovies(page: page)
+                    let genreFilteredMovies = movies.filter { $0.genreIds.contains(gId) }
+                    results.append(contentsOf: genreFilteredMovies.map { mapMovie($0) })
+                }
+                if isTV {
+                    let tvItems = try await tmdbService.fetchOnTheAirTV(page: page)
+                    let genreFilteredTVItems = tvItems.filter { $0.genreIds.contains(gId) }
+                    let filteredTVItems = filterTVShowsExcludingAnime(genreFilteredTVItems)
+                    results.append(contentsOf: filteredTVItems.map { mapTV($0, type: .tvShow) })
+                }
+                if isAnime {
+                    if usesAniListAnimeSource {
+                        let animeItems = (try? await aniListService.fetchNewAnime(
+                            page: page,
+                            genre: selectedGenreName
+                        )) ?? []
+                        results.append(contentsOf: mapAniListAnimeCollection(animeItems))
+                    } else {
+                        let animeItems = try await fetchTmdbAnime(page: page, catalog: .new, genreId: gId)
+                        results.append(contentsOf: mapTmdbAnimeCollection(animeItems))
+                    }
+                }
+            case .featured:
+                if isMovie {
+                    let movies = try await tmdbService.fetchTrendingMovies(page: page)
+                    let genreFilteredMovies = movies.filter { $0.genreIds.contains(gId) }
+                    results.append(contentsOf: genreFilteredMovies.map { mapMovie($0) })
+                }
+                if isTV {
+                    let tvItems = try await tmdbService.fetchTrendingTV(page: page)
+                    let genreFilteredTVItems = tvItems.filter { $0.genreIds.contains(gId) }
+                    let filteredTVItems = filterTVShowsExcludingAnime(genreFilteredTVItems)
+                    results.append(contentsOf: filteredTVItems.map { mapTV($0, type: .tvShow) })
+                }
+                if isAnime {
+                    if usesAniListAnimeSource {
+                        let animeItems = (try? await aniListService.fetchTrendingAnime(
+                            page: page,
+                            genre: selectedGenreName
+                        )) ?? []
+                        results.append(contentsOf: mapAniListAnimeCollection(animeItems))
+                    } else {
+                        let animeItems = try await fetchTmdbAnime(page: page, catalog: .featured, genreId: gId)
+                        results.append(contentsOf: mapTmdbAnimeCollection(animeItems))
+                    }
+                }
             }
-            if isTV {
-                let tvItems = try await tmdbService.discoverTVByGenre(genreId: gId, page: page)
-                let filteredTVItems = filterTVShowsExcludingAnime(tvItems)
-                results.append(contentsOf: filteredTVItems.map { mapTV($0, type: .tvShow) })
+        } else if isAnime, let selectedGenreName, usesAniListAnimeSource {
+            let animeItems: [AniListAnime]
+            switch catalog {
+            case .popular:
+                animeItems = (try? await aniListService.fetchPopularAnime(page: page, genre: selectedGenreName)) ?? []
+            case .new:
+                animeItems = (try? await aniListService.fetchNewAnime(page: page, genre: selectedGenreName)) ?? []
+            case .featured:
+                animeItems = (try? await aniListService.fetchTrendingAnime(page: page, genre: selectedGenreName)) ?? []
             }
-            if isAnime {
-                let animeItems = (try? await aniListService.fetchPopularAnime(
-                    page: page,
-                    genre: selectedGenreName
-                )) ?? []
-                results.append(contentsOf: mapAniListAnimeCollection(animeItems))
-            }
-        } else if isAnime, let selectedGenreName {
-            let animeItems = (try? await aniListService.fetchPopularAnime(
-                page: page,
-                genre: selectedGenreName
-            )) ?? []
             results.append(contentsOf: mapAniListAnimeCollection(animeItems))
         } else {
             switch catalog {
@@ -641,8 +769,13 @@ class MediaService {
                     results.append(contentsOf: filteredTVItems.map { mapTV($0, type: .tvShow) })
                 }
                 if isAnime {
-                    let animeItems = (try? await aniListService.fetchPopularAnime(page: page)) ?? []
-                    results.append(contentsOf: mapAniListAnimeCollection(animeItems))
+                    if usesAniListAnimeSource {
+                        let animeItems = (try? await aniListService.fetchPopularAnime(page: page)) ?? []
+                        results.append(contentsOf: mapAniListAnimeCollection(animeItems))
+                    } else {
+                        let animeItems = try await fetchTmdbAnime(page: page, catalog: .popular)
+                        results.append(contentsOf: mapTmdbAnimeCollection(animeItems))
+                    }
                 }
             case .new:
                 if isMovie {
@@ -655,8 +788,13 @@ class MediaService {
                     results.append(contentsOf: filteredTVItems.map { mapTV($0, type: .tvShow) })
                 }
                 if isAnime {
-                    let animeItems = (try? await aniListService.fetchNewAnime(page: page)) ?? []
-                    results.append(contentsOf: mapAniListAnimeCollection(animeItems))
+                    if usesAniListAnimeSource {
+                        let animeItems = (try? await aniListService.fetchNewAnime(page: page)) ?? []
+                        results.append(contentsOf: mapAniListAnimeCollection(animeItems))
+                    } else {
+                        let animeItems = try await fetchTmdbAnime(page: page, catalog: .new)
+                        results.append(contentsOf: mapTmdbAnimeCollection(animeItems))
+                    }
                 }
             case .featured:
                 if isMovie {
@@ -669,8 +807,13 @@ class MediaService {
                     results.append(contentsOf: filteredTVItems.map { mapTV($0, type: .tvShow) })
                 }
                 if isAnime {
-                    let animeItems = (try? await aniListService.fetchTrendingAnime(page: page)) ?? []
-                    results.append(contentsOf: mapAniListAnimeCollection(animeItems))
+                    if usesAniListAnimeSource {
+                        let animeItems = (try? await aniListService.fetchTrendingAnime(page: page)) ?? []
+                        results.append(contentsOf: mapAniListAnimeCollection(animeItems))
+                    } else {
+                        let animeItems = try await fetchTmdbAnime(page: page, catalog: .featured)
+                        results.append(contentsOf: mapTmdbAnimeCollection(animeItems))
+                    }
                 }
             }
         }
@@ -683,10 +826,12 @@ class MediaService {
             hasMoreDiscover = true
             discoverMedia = []
         }
-        
+
         guard !isDiscoverLoading, hasMoreDiscover else { return }
-        
+
         isDiscoverLoading = true
+        defer { isDiscoverLoading = false }
+
         do {
             if genreMap.isEmpty {
                 async let movieGenres = tmdbService.fetchMovieGenres()
@@ -696,39 +841,43 @@ class MediaService {
                 for g in tg { genreMap[g.id] = g.name }
             }
 
-            await ensureAniListGenresLoaded()
+            if usesAniListAnimeSource {
+                await ensureAniListGenresLoaded()
+            }
 
-            let pagesToFetch = Array(currentDiscoverPage..<(currentDiscoverPage + 5))
-            var pageResultsDict = [Int: [MediaItem]]()
+            let fetchedItems = try await fetchDiscoverPage(
+                page: currentDiscoverPage,
+                type: type,
+                catalog: catalog,
+                genreId: genreId,
+                query: query
+            )
 
-            for page in pagesToFetch {
-                let items = try await fetchDiscoverPage(page: page, type: type, catalog: catalog, genreId: genreId, query: query)
-                if items.isEmpty { hasMoreDiscover = false }
-                pageResultsDict[page] = items
-                if !hasMoreDiscover { break }
+            if fetchedItems.isEmpty {
+                hasMoreDiscover = false
+                return
             }
 
             var merged: [MediaItem] = []
             var seen = Set<Int>(discoverMedia.map { $0.id })
-            
-            for page in pagesToFetch.sorted() {
-                guard let results = pageResultsDict[page] else { continue }
-                for var item in results {
-                    if seen.contains(item.id) { continue }
-                    seen.insert(item.id)
-                    if let existing = allMedia.first(where: { $0.id == item.id }) {
-                        item.isWatched = existing.isWatched
-                        item.isInQueue = existing.isInQueue
-                        item.watchedEpisodes = existing.watchedEpisodes
-                        item.totalEpisodes = existing.totalEpisodes
-                        item.totalSeasons = existing.totalSeasons
-                    } else {
-                        item.isWatched = watchedIds.contains(item.id)
-                        item.isInQueue = queueIds.contains(item.id)
-                        item.watchedEpisodes = episodeWatchedMap[item.id]?.count ?? 0
-                    }
-                    merged.append(item)
+
+            for var item in fetchedItems {
+                if seen.contains(item.id) { continue }
+                seen.insert(item.id)
+
+                if let existing = allMedia.first(where: { $0.id == item.id }) {
+                    item.isWatched = existing.isWatched
+                    item.isInQueue = existing.isInQueue
+                    item.watchedEpisodes = existing.watchedEpisodes
+                    item.totalEpisodes = existing.totalEpisodes
+                    item.totalSeasons = existing.totalSeasons
+                } else {
+                    item.isWatched = watchedIds.contains(item.id)
+                    item.isInQueue = queueIds.contains(item.id)
+                    item.watchedEpisodes = episodeWatchedMap[item.id]?.count ?? 0
                 }
+
+                merged.append(item)
             }
 
             // Also merge new items into allMedia so they're available elsewhere
@@ -738,23 +887,14 @@ class MediaService {
                 }
             }
 
-            if merged.isEmpty && pageResultsDict.values.contains(where: { !$0.isEmpty }) {
-                // If everything was seen, keep trying next page if needed
-                if hasMoreDiscover {
-                    currentDiscoverPage += 5
-                    isDiscoverLoading = false // unlock for next fetch
-                    return await loadDiscover(reset: false, type: type, catalog: catalog, genreId: genreId, query: query)
-                }
-            } else if !merged.isEmpty {
+            if !merged.isEmpty {
                 discoverMedia.append(contentsOf: merged)
-                currentDiscoverPage += 5
             }
-
+            currentDiscoverPage += 1
         } catch {
             if reset { discoverMedia = [] }
             hasMoreDiscover = false
         }
-        isDiscoverLoading = false
     }
 
     // MARK: - Genre Discover
@@ -782,7 +922,9 @@ class MediaService {
             return
         }
 
-        await ensureAniListGenresLoaded()
+        if usesAniListAnimeSource {
+            await ensureAniListGenresLoaded()
+        }
 
         guard let resolvedGenreId = genreIdForName(genreName) else {
             genreMedia = []
@@ -818,8 +960,13 @@ class MediaService {
             }
 
             if shouldFetchAnime {
-                let animeItems = (try? await aniListService.fetchPopularAnime(page: 1, genre: genreName)) ?? []
-                results.append(contentsOf: mapAniListAnimeCollection(animeItems))
+                if usesAniListAnimeSource {
+                    let animeItems = (try? await aniListService.fetchPopularAnime(page: 1, genre: genreName)) ?? []
+                    results.append(contentsOf: mapAniListAnimeCollection(animeItems))
+                } else if let resolvedTmdbGenreId {
+                    let animeItems = (try? await fetchTmdbAnime(page: 1, catalog: .popular, genreId: resolvedTmdbGenreId)) ?? []
+                    results.append(contentsOf: mapTmdbAnimeCollection(animeItems))
+                }
             }
 
             // Deduplicate, merge user state
@@ -1067,9 +1214,34 @@ class MediaService {
         imdbLoadingIds.contains(itemId)
     }
 
+    private func applyImdbRating(_ rating: Double, for itemId: Int) {
+        if let index = allMedia.firstIndex(where: { $0.id == itemId }) {
+            allMedia[index].imdbRating = rating
+        }
+        if let index = featuredMovies.firstIndex(where: { $0.id == itemId }) {
+            featuredMovies[index].imdbRating = rating
+        }
+        if let index = featuredTVShows.firstIndex(where: { $0.id == itemId }) {
+            featuredTVShows[index].imdbRating = rating
+        }
+        if let index = featuredAnime.firstIndex(where: { $0.id == itemId }) {
+            featuredAnime[index].imdbRating = rating
+        }
+        if let index = searchResults.firstIndex(where: { $0.id == itemId }) {
+            searchResults[index].imdbRating = rating
+        }
+        if let index = genreMedia.firstIndex(where: { $0.id == itemId }) {
+            genreMedia[index].imdbRating = rating
+        }
+        if let index = discoverMedia.firstIndex(where: { $0.id == itemId }) {
+            discoverMedia[index].imdbRating = rating
+        }
+    }
+
     func fetchImdbRatingForItem(_ item: MediaItem) async -> Double? {
         // Check cache
         if let cached = imdbRatingCache[item.id] {
+            applyImdbRating(cached, for: item.id)
             return cached
         }
 
@@ -1104,29 +1276,7 @@ class MediaService {
             guard let id = imdbId else { return nil }
             if let rating = try await tmdbService.fetchImdbRating(imdbId: id) {
                 imdbRatingCache[item.id] = rating
-                
-                // Propagate to all collections
-                if let index = allMedia.firstIndex(where: { $0.id == item.id }) {
-                    allMedia[index].imdbRating = rating
-                }
-                if let index = featuredMovies.firstIndex(where: { $0.id == item.id }) {
-                    featuredMovies[index].imdbRating = rating
-                }
-                if let index = featuredTVShows.firstIndex(where: { $0.id == item.id }) {
-                    featuredTVShows[index].imdbRating = rating
-                }
-                if let index = featuredAnime.firstIndex(where: { $0.id == item.id }) {
-                    featuredAnime[index].imdbRating = rating
-                }
-                if let index = searchResults.firstIndex(where: { $0.id == item.id }) {
-                    searchResults[index].imdbRating = rating
-                }
-                if let index = genreMedia.firstIndex(where: { $0.id == item.id }) {
-                    genreMedia[index].imdbRating = rating
-                }
-                if let index = discoverMedia.firstIndex(where: { $0.id == item.id }) {
-                    discoverMedia[index].imdbRating = rating
-                }
+                applyImdbRating(rating, for: item.id)
                 return rating
             }
         } catch {

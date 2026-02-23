@@ -402,37 +402,12 @@ struct LibraryView: View {
     }
 
     private func nextUpEpisodeInfo(for item: MediaItem) -> (key: String?, label: String) {
-        if item.isWatched {
-            return (nil, "All Episodes")
-        }
-
-        let totalEpisodes = item.totalEpisodes ?? 0
-        let watchedCount = mediaService.watchedEpisodeCount(mediaId: item.id)
-        if totalEpisodes > 0, watchedCount >= totalEpisodes {
-            return (nil, "All Episodes")
-        }
-
-        let watchedKeys = mediaService.watchedEpisodeKeys(mediaId: item.id)
-        if watchedKeys.isEmpty {
-            return ("s1e1", "S1:E1")
-        }
-
-        // Parse all watched episode keys to find the latest
-        var maxSeason = 1
-        var maxEpisode = 0
-        for key in watchedKeys {
-            let parsed = parseEpisodeKey(key)
-            if parsed.season > maxSeason || (parsed.season == maxSeason && parsed.episode > maxEpisode) {
-                maxSeason = parsed.season
-                maxEpisode = parsed.episode
-            }
-        }
-
-        let nextEpisode = maxEpisode + 1
-        if totalEpisodes > 0, watchedCount + 1 > totalEpisodes {
-            return (nil, "All Episodes")
-        }
-        return ("s\(maxSeason)e\(nextEpisode)", "S\(maxSeason):E\(nextEpisode)")
+        let key = EpisodeProgress.nextEpisodeKey(
+            watchedKeys: mediaService.watchedEpisodeKeys(mediaId: item.id),
+            totalEpisodes: item.totalEpisodes,
+            isWatched: item.isWatched
+        )
+        return (key, EpisodeProgress.displayLabel(for: key, style: .library))
     }
 
     // MARK: - Episode Progress Badge
@@ -514,7 +489,7 @@ struct LibraryView: View {
 
                 if expandedItems.contains(item.id) {
                     VStack(spacing: 1) {
-                        ForEach(episodeKeys.sorted(), id: \.self) { key in
+                        ForEach(EpisodeProgress.sortedEpisodeKeys(episodeKeys), id: \.self) { key in
                             episodeActionRow(item: item, key: key)
                         }
                     }
@@ -527,7 +502,7 @@ struct LibraryView: View {
     // MARK: - Episode Action Row
 
     private func episodeActionRow(item: MediaItem, key: String) -> some View {
-        let parsed = parseEpisodeKey(key)
+        let parsed = EpisodeProgress.parseEpisodeKey(key) ?? EpisodeKey(season: 0, episode: 0)
         let totalEpisodes = item.totalEpisodes ?? 0
 
         return HStack(spacing: 10) {
@@ -559,6 +534,7 @@ struct LibraryView: View {
                         .font(.body)
                         .foregroundStyle(.green)
                 }
+                .accessibilityLabel("Mark episode watched")
 
                 Button {
                     withAnimation(.snappy) {
@@ -572,6 +548,7 @@ struct LibraryView: View {
                         .font(.body)
                         .foregroundStyle(.secondary)
                 }
+                .accessibilityLabel("Remove episode from watchlist")
             } else {
                 Button {
                     withAnimation(.snappy) {
@@ -586,6 +563,7 @@ struct LibraryView: View {
                         .font(.body)
                         .foregroundStyle(.green)
                 }
+                .accessibilityLabel("Unmark episode watched")
             }
         }
         .padding(.horizontal, 12)
@@ -618,6 +596,7 @@ struct LibraryView: View {
                                 .font(.title3)
                                 .foregroundStyle(.green)
                         }
+                        .accessibilityLabel("Mark next episode watched")
                     }
                 } else if item.isInQueue {
                     Button {
@@ -627,6 +606,7 @@ struct LibraryView: View {
                             .font(.title3)
                             .foregroundStyle(.green)
                     }
+                    .accessibilityLabel("Mark title watched")
                 }
 
                 Button {
@@ -636,6 +616,7 @@ struct LibraryView: View {
                         .font(.title3)
                         .foregroundStyle(.secondary)
                 }
+                .accessibilityLabel("Remove from watchlist")
             } else {
                 if item.isWatched {
                     Button {
@@ -645,6 +626,7 @@ struct LibraryView: View {
                             .font(.title3)
                             .foregroundStyle(.green)
                     }
+                    .accessibilityLabel("Unmark watched")
                 }
             }
         }
@@ -658,16 +640,6 @@ struct LibraryView: View {
         RatingView(item: item, fontSize: 12, starSize: 10)
     }
 
-    private func parseEpisodeKey(_ key: String) -> (season: Int, episode: Int) {
-        let cleaned = key.lowercased()
-        let parts = cleaned.split(separator: "e")
-        if parts.count == 2,
-           let season = Int(parts[0].dropFirst()),
-           let episode = Int(parts[1]) {
-            return (season, episode)
-        }
-        return (0, 0)
-    }
 }
 
 // MARK: - Shimmer View

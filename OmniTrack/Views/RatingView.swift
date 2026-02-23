@@ -19,11 +19,11 @@ struct RatingView: View {
     }
 
     private var ratingIconName: String {
-        isAniListAnime ? "a.circle.fill" : "star.fill"
+        "star.fill"
     }
 
     private var ratingIconColor: Color {
-        isAniListAnime ? item.animeRatingIconColor : .yellow
+        .yellow
     }
 
     var body: some View {
