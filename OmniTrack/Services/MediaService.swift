@@ -37,7 +37,11 @@ class MediaService {
     private var aniListGenreIdMap: [String: Int] = [:]
     var genreMap: [Int: String] = [:]
     private var watchedIds: Set<Int> = []
+    private var inProgressIds: Set<Int> = []
     private var queueIds: Set<Int> = []
+    private var watchedAddedOrder: [Int] = []
+    private var queueAddedOrder: [Int] = []
+    private var inProgressUpdatedOrder: [Int] = []
     var episodeWatchedMap: [Int: Set<String>] = [:]
     var episodeQueueMap: [Int: Set<String>] = [:]
     private var genreMediaCache: [String: (items: [MediaItem], date: Date)] = [:]
@@ -86,6 +90,90 @@ class MediaService {
             !directWatched.contains(where: { $0.id == item.id })
         }
         return combined
+    }
+
+    var inProgressItems: [MediaItem] {
+        allMedia.filter { $0.isInProgress && !$0.isWatched }
+    }
+
+    func inProgressItemsSortedByRecentUpdate() -> [MediaItem] {
+        var ordered: [MediaItem] = []
+        var seen: Set<Int> = []
+
+        for id in inProgressUpdatedOrder.reversed() {
+            guard !seen.contains(id) else { continue }
+            guard let item = allMedia.first(where: { $0.id == id }) else { continue }
+            guard item.isInProgress, !item.isWatched else { continue }
+            seen.insert(id)
+            ordered.append(item)
+        }
+
+        let fallback = inProgressItems
+            .filter { !seen.contains($0.id) }
+            .sorted { lhs, rhs in
+                if lhs.hasSeasonsAndEpisodes != rhs.hasSeasonsAndEpisodes {
+                    return lhs.hasSeasonsAndEpisodes
+                }
+                let lhsCount = watchedEpisodeCount(mediaId: lhs.id)
+                let rhsCount = watchedEpisodeCount(mediaId: rhs.id)
+                if lhsCount != rhsCount {
+                    return lhsCount > rhsCount
+                }
+                if lhs.year != rhs.year {
+                    return lhs.year > rhs.year
+                }
+                return lhs.title.localizedCompare(rhs.title) == .orderedAscending
+            }
+
+        return ordered + fallback
+    }
+
+    func recentQueueItems(type: MediaType, limit: Int) -> [MediaItem] {
+        let ordered = recentItems(
+            from: queueAddedOrder,
+            type: type,
+            limit: limit
+        ) { item in
+            !item.isWatched && (item.isInQueue || !(episodeQueueMap[item.id]?.isEmpty ?? true))
+        }
+
+        if ordered.count >= limit {
+            return ordered
+        }
+
+        let seenIds = Set(ordered.map(\.id))
+        let fallback = Array(
+            queueItems
+                .filter { $0.type == type && !$0.isWatched && !seenIds.contains($0.id) }
+                .suffix(max(0, limit - ordered.count))
+                .reversed()
+        )
+
+        return ordered + fallback
+    }
+
+    func recentWatchedItems(type: MediaType, limit: Int) -> [MediaItem] {
+        let ordered = recentItems(
+            from: watchedAddedOrder,
+            type: type,
+            limit: limit
+        ) { item in
+            item.isWatched
+        }
+
+        if ordered.count >= limit {
+            return ordered
+        }
+
+        let seenIds = Set(ordered.map(\.id))
+        let fallback = Array(
+            watchedItems
+                .filter { $0.type == type && $0.isWatched && !seenIds.contains($0.id) }
+                .suffix(max(0, limit - ordered.count))
+                .reversed()
+        )
+
+        return ordered + fallback
     }
 
     var stats: ViewingStats {
@@ -403,6 +491,7 @@ class MediaService {
             backdropPath: backdropPath,
             rating: averageRating,
             year: year,
+            releaseDateString: year > 0 ? "\(year)-01-01" : nil,
             genres: genres,
             totalEpisodes: totalEpisodes,
             watchedEpisodes: 0,
@@ -616,12 +705,14 @@ class MediaService {
                 // Merge user state from allMedia if item is already there
                 if let existing = allMedia.first(where: { $0.id == item.id }) {
                     item.isWatched = existing.isWatched
+                    item.isInProgress = existing.isInProgress
                     item.isInQueue = existing.isInQueue
                     item.watchedEpisodes = existing.watchedEpisodes
                     item.totalEpisodes = existing.totalEpisodes
                     item.totalSeasons = existing.totalSeasons
                 } else {
                     item.isWatched = watchedIds.contains(item.id)
+                    item.isInProgress = inProgressIds.contains(item.id) && !item.isWatched
                     item.isInQueue = queueIds.contains(item.id)
                     item.watchedEpisodes = episodeWatchedMap[item.id]?.count ?? 0
                 }
@@ -867,12 +958,14 @@ class MediaService {
 
                 if let existing = allMedia.first(where: { $0.id == item.id }) {
                     item.isWatched = existing.isWatched
+                    item.isInProgress = existing.isInProgress
                     item.isInQueue = existing.isInQueue
                     item.watchedEpisodes = existing.watchedEpisodes
                     item.totalEpisodes = existing.totalEpisodes
                     item.totalSeasons = existing.totalSeasons
                 } else {
                     item.isWatched = watchedIds.contains(item.id)
+                    item.isInProgress = inProgressIds.contains(item.id) && !item.isWatched
                     item.isInQueue = queueIds.contains(item.id)
                     item.watchedEpisodes = episodeWatchedMap[item.id]?.count ?? 0
                 }
@@ -977,12 +1070,14 @@ class MediaService {
                 seen.insert(item.id)
                 if let existing = allMedia.first(where: { $0.id == item.id }) {
                     item.isWatched = existing.isWatched
+                    item.isInProgress = existing.isInProgress
                     item.isInQueue = existing.isInQueue
                     item.watchedEpisodes = existing.watchedEpisodes
                     item.totalEpisodes = existing.totalEpisodes
                     item.totalSeasons = existing.totalSeasons
                 } else {
                     item.isWatched = watchedIds.contains(item.id)
+                    item.isInProgress = inProgressIds.contains(item.id) && !item.isWatched
                     item.isInQueue = queueIds.contains(item.id)
                     item.watchedEpisodes = episodeWatchedMap[item.id]?.count ?? 0
                 }
@@ -1012,13 +1107,22 @@ class MediaService {
         allMedia[index].isWatched.toggle()
         if allMedia[index].isWatched {
             allMedia[index].isInQueue = false
+            allMedia[index].isInProgress = false
             watchedIds.insert(item.id)
+            inProgressIds.remove(item.id)
             queueIds.remove(item.id)
+            recordWatchedAddition(item.id)
+            removeQueueAddition(item.id)
+            removeInProgressUpdate(item.id)
             recordWatchedDate()
         } else {
             watchedIds.remove(item.id)
+            inProgressIds.remove(item.id)
             episodeWatchedMap.removeValue(forKey: item.id)
             allMedia[index].watchedEpisodes = 0
+            allMedia[index].isInProgress = false
+            removeWatchedAddition(item.id)
+            removeInProgressUpdate(item.id)
         }
         saveUserData()
         saveEpisodeData()
@@ -1029,9 +1133,11 @@ class MediaService {
         allMedia[index].isInQueue.toggle()
         if allMedia[index].isInQueue {
             queueIds.insert(item.id)
+            recordQueueAddition(item.id)
         } else {
             queueIds.remove(item.id)
             episodeQueueMap.removeValue(forKey: item.id)
+            removeQueueAddition(item.id)
         }
         saveUserData()
         saveEpisodeData()
@@ -1040,10 +1146,34 @@ class MediaService {
     func markWatched(_ item: MediaItem) {
         guard let index = allMedia.firstIndex(where: { $0.id == item.id }) else { return }
         allMedia[index].isWatched = true
+        allMedia[index].isInProgress = false
         allMedia[index].isInQueue = false
         watchedIds.insert(item.id)
+        inProgressIds.remove(item.id)
         queueIds.remove(item.id)
+        recordWatchedAddition(item.id)
+        removeQueueAddition(item.id)
+        removeInProgressUpdate(item.id)
         recordWatchedDate()
+        saveUserData()
+    }
+
+    func toggleInProgress(_ item: MediaItem) {
+        guard let index = allMedia.firstIndex(where: { $0.id == item.id }) else { return }
+
+        if allMedia[index].isInProgress {
+            allMedia[index].isInProgress = false
+            inProgressIds.remove(item.id)
+        } else {
+            allMedia[index].isInProgress = true
+            allMedia[index].isWatched = false
+            inProgressIds.insert(item.id)
+            watchedIds.remove(item.id)
+            removeWatchedAddition(item.id)
+        }
+
+        reconcileProgressState(for: index)
+        syncInProgressUpdate(for: index)
         saveUserData()
     }
 
@@ -1052,6 +1182,7 @@ class MediaService {
         if !allMedia[index].isInQueue {
             allMedia[index].isInQueue = true
             queueIds.insert(item.id)
+            recordQueueAddition(item.id)
             saveUserData()
         }
     }
@@ -1083,21 +1214,18 @@ class MediaService {
             episodeWatchedMap[mediaId]!.remove(key)
         } else {
             episodeWatchedMap[mediaId]!.insert(key)
+            recordWatchedAddition(mediaId)
             recordWatchedDate()
         }
 
         if let index = allMedia.firstIndex(where: { $0.id == mediaId }) {
-            allMedia[index].watchedEpisodes = episodeWatchedMap[mediaId]?.count ?? 0
+            reconcileProgressState(for: index, totalEpisodesOverride: totalEpisodes)
+            syncInProgressUpdate(for: index)
+        }
 
-            if totalEpisodes > 0 && (episodeWatchedMap[mediaId]?.count ?? 0) >= totalEpisodes {
-                allMedia[index].isWatched = true
-                allMedia[index].isInQueue = false
-                watchedIds.insert(mediaId)
-                queueIds.remove(mediaId)
-            } else {
-                allMedia[index].isWatched = false
-                watchedIds.remove(mediaId)
-            }
+        if (episodeWatchedMap[mediaId]?.isEmpty ?? true),
+           !(allMedia.first(where: { $0.id == mediaId })?.isWatched ?? false) {
+            removeWatchedAddition(mediaId)
         }
 
         saveUserData()
@@ -1113,22 +1241,25 @@ class MediaService {
             episodeQueueMap[mediaId]!.remove(key)
         } else {
             episodeQueueMap[mediaId]!.insert(key)
+            recordQueueAddition(mediaId)
+        }
+
+        if (episodeQueueMap[mediaId]?.isEmpty ?? true),
+           !(allMedia.first(where: { $0.id == mediaId })?.isInQueue ?? false) {
+            removeQueueAddition(mediaId)
         }
 
         saveEpisodeData()
+        saveUserData()
     }
 
     func markAllEpisodesWatched(mediaId: Int, keys: [String], totalEpisodes: Int) {
         episodeWatchedMap[mediaId] = Set(keys)
+        recordWatchedAddition(mediaId)
 
         if let index = allMedia.firstIndex(where: { $0.id == mediaId }) {
-            allMedia[index].watchedEpisodes = keys.count
-            if totalEpisodes > 0 && keys.count >= totalEpisodes {
-                allMedia[index].isWatched = true
-                allMedia[index].isInQueue = false
-                watchedIds.insert(mediaId)
-                queueIds.remove(mediaId)
-            }
+            reconcileProgressState(for: index, totalEpisodesOverride: totalEpisodes)
+            syncInProgressUpdate(for: index)
         }
 
         saveUserData()
@@ -1145,18 +1276,13 @@ class MediaService {
             let key = "s\(seasonNumber)e\(epNum)"
             episodeWatchedMap[mediaId]?.insert(key)
         }
+        recordWatchedAddition(mediaId)
         
         recordWatchedDate()
         
         if let index = allMedia.firstIndex(where: { $0.id == mediaId }) {
-            allMedia[index].watchedEpisodes = episodeWatchedMap[mediaId]?.count ?? 0
-            
-            if totalEpisodes > 0 && (episodeWatchedMap[mediaId]?.count ?? 0) >= totalEpisodes {
-                allMedia[index].isWatched = true
-                allMedia[index].isInQueue = false
-                watchedIds.insert(mediaId)
-                queueIds.remove(mediaId)
-            }
+            reconcileProgressState(for: index, totalEpisodesOverride: totalEpisodes)
+            syncInProgressUpdate(for: index)
         }
         
         saveUserData()
@@ -1172,13 +1298,13 @@ class MediaService {
         }
         
         if let index = allMedia.firstIndex(where: { $0.id == mediaId }) {
-            allMedia[index].watchedEpisodes = episodeWatchedMap[mediaId]?.count ?? 0
-            
-            let totalEpisodes = allMedia[index].totalEpisodes ?? 0
-            if totalEpisodes > 0 && (episodeWatchedMap[mediaId]?.count ?? 0) < totalEpisodes {
-                allMedia[index].isWatched = false
-                watchedIds.remove(mediaId)
-            }
+            reconcileProgressState(for: index)
+            syncInProgressUpdate(for: index)
+        }
+
+        if (episodeWatchedMap[mediaId]?.isEmpty ?? true),
+           !(allMedia.first(where: { $0.id == mediaId })?.isWatched ?? false) {
+            removeWatchedAddition(mediaId)
         }
         
         saveUserData()
@@ -1189,9 +1315,12 @@ class MediaService {
         episodeWatchedMap.removeValue(forKey: mediaId)
 
         if let index = allMedia.firstIndex(where: { $0.id == mediaId }) {
-            allMedia[index].watchedEpisodes = 0
-            allMedia[index].isWatched = false
-            watchedIds.remove(mediaId)
+            reconcileProgressState(for: index)
+            syncInProgressUpdate(for: index)
+        }
+
+        if !(allMedia.first(where: { $0.id == mediaId })?.isWatched ?? false) {
+            removeWatchedAddition(mediaId)
         }
 
         saveUserData()
@@ -1202,7 +1331,7 @@ class MediaService {
         guard let index = allMedia.firstIndex(where: { $0.id == mediaId }) else { return }
         allMedia[index].totalEpisodes = totalEpisodes
         allMedia[index].totalSeasons = totalSeasons
-        allMedia[index].watchedEpisodes = episodeWatchedMap[mediaId]?.count ?? 0
+        reconcileProgressState(for: index, totalEpisodesOverride: totalEpisodes)
     }
 
     // MARK: - IMDB Rating
@@ -1300,6 +1429,10 @@ class MediaService {
         if episodeQueueMap[mediaId]?.isEmpty == true {
             episodeQueueMap.removeValue(forKey: mediaId)
         }
+        if !(allMedia.first(where: { $0.id == mediaId })?.isInQueue ?? false) {
+            removeQueueAddition(mediaId)
+            saveUserData()
+        }
         saveEpisodeData()
     }
 
@@ -1309,22 +1442,19 @@ class MediaService {
         if episodeQueueMap[mediaId]?.isEmpty == true {
             episodeQueueMap.removeValue(forKey: mediaId)
         }
+        removeQueueAddition(mediaId)
 
         // Add to watched
         if episodeWatchedMap[mediaId] == nil {
             episodeWatchedMap[mediaId] = []
         }
         episodeWatchedMap[mediaId]!.insert(key)
+        recordWatchedAddition(mediaId)
 
         // Update item
         if let index = allMedia.firstIndex(where: { $0.id == mediaId }) {
-            allMedia[index].watchedEpisodes = episodeWatchedMap[mediaId]?.count ?? 0
-            if totalEpisodes > 0 && (episodeWatchedMap[mediaId]?.count ?? 0) >= totalEpisodes {
-                allMedia[index].isWatched = true
-                allMedia[index].isInQueue = false
-                watchedIds.insert(mediaId)
-                queueIds.remove(mediaId)
-            }
+            reconcileProgressState(for: index, totalEpisodesOverride: totalEpisodes)
+            syncInProgressUpdate(for: index)
         }
 
         saveUserData()
@@ -1354,6 +1484,7 @@ class MediaService {
             backdropPath: movie.backdropPath,
             rating: movie.voteAverage,
             year: year,
+            releaseDateString: movie.releaseDate,
             genres: genres,
             totalEpisodes: nil,
             watchedEpisodes: 0,
@@ -1378,6 +1509,7 @@ class MediaService {
             backdropPath: tv.backdropPath,
             rating: tv.voteAverage,
             year: year,
+            releaseDateString: tv.firstAirDate,
             genres: genres,
             totalEpisodes: nil,
             watchedEpisodes: 0,
@@ -1400,27 +1532,135 @@ class MediaService {
     private func applyUserData() {
         for i in allMedia.indices {
             allMedia[i].isWatched = watchedIds.contains(allMedia[i].id)
+            allMedia[i].isInProgress = inProgressIds.contains(allMedia[i].id) && !allMedia[i].isWatched
             allMedia[i].isInQueue = queueIds.contains(allMedia[i].id)
         }
     }
 
     private func applyEpisodeCounts() {
         for i in allMedia.indices {
-            let count = episodeWatchedMap[allMedia[i].id]?.count ?? 0
-            allMedia[i].watchedEpisodes = count
+            reconcileProgressState(for: i)
+        }
+    }
+
+    private func recentItems(
+        from order: [Int],
+        type: MediaType,
+        limit: Int,
+        where include: (MediaItem) -> Bool
+    ) -> [MediaItem] {
+        guard limit > 0 else { return [] }
+
+        var items: [MediaItem] = []
+        var seen: Set<Int> = []
+        for id in order.reversed() {
+            guard !seen.contains(id) else { continue }
+            guard let item = allMedia.first(where: { $0.id == id }) else { continue }
+            guard item.type == type, include(item) else { continue }
+            seen.insert(id)
+            items.append(item)
+            if items.count >= limit {
+                break
+            }
+        }
+        return items
+    }
+
+    private func recordQueueAddition(_ mediaId: Int) {
+        queueAddedOrder.removeAll { $0 == mediaId }
+        queueAddedOrder.append(mediaId)
+    }
+
+    private func removeQueueAddition(_ mediaId: Int) {
+        queueAddedOrder.removeAll { $0 == mediaId }
+    }
+
+    private func recordWatchedAddition(_ mediaId: Int) {
+        watchedAddedOrder.removeAll { $0 == mediaId }
+        watchedAddedOrder.append(mediaId)
+    }
+
+    private func removeWatchedAddition(_ mediaId: Int) {
+        watchedAddedOrder.removeAll { $0 == mediaId }
+    }
+
+    private func recordInProgressUpdate(_ mediaId: Int) {
+        inProgressUpdatedOrder.removeAll { $0 == mediaId }
+        inProgressUpdatedOrder.append(mediaId)
+    }
+
+    private func removeInProgressUpdate(_ mediaId: Int) {
+        inProgressUpdatedOrder.removeAll { $0 == mediaId }
+    }
+
+    private func syncInProgressUpdate(for index: Int) {
+        let mediaId = allMedia[index].id
+        if allMedia[index].isInProgress && !allMedia[index].isWatched {
+            recordInProgressUpdate(mediaId)
+        } else {
+            removeInProgressUpdate(mediaId)
         }
     }
 
     private func loadUserData() {
         let watched = UserDefaults.standard.array(forKey: "watchedIds") as? [Int] ?? []
+        let inProgress = UserDefaults.standard.array(forKey: "inProgressIds") as? [Int] ?? []
         let queued = UserDefaults.standard.array(forKey: "queueIds") as? [Int] ?? []
+        let watchedOrder = UserDefaults.standard.array(forKey: "watchedAddedOrder") as? [Int] ?? []
+        let queueOrder = UserDefaults.standard.array(forKey: "queueAddedOrder") as? [Int] ?? []
+        let inProgressOrder = UserDefaults.standard.array(forKey: "inProgressUpdatedOrder") as? [Int] ?? []
         watchedIds = Set(watched)
+        inProgressIds = Set(inProgress)
         queueIds = Set(queued)
+        watchedAddedOrder = watchedOrder
+        queueAddedOrder = queueOrder
+        inProgressUpdatedOrder = inProgressOrder
     }
 
     private func saveUserData() {
         UserDefaults.standard.set(Array(watchedIds), forKey: "watchedIds")
+        UserDefaults.standard.set(Array(inProgressIds), forKey: "inProgressIds")
         UserDefaults.standard.set(Array(queueIds), forKey: "queueIds")
+        UserDefaults.standard.set(watchedAddedOrder, forKey: "watchedAddedOrder")
+        UserDefaults.standard.set(queueAddedOrder, forKey: "queueAddedOrder")
+        UserDefaults.standard.set(inProgressUpdatedOrder, forKey: "inProgressUpdatedOrder")
+    }
+
+    private func reconcileProgressState(for index: Int, totalEpisodesOverride: Int? = nil) {
+        let mediaId = allMedia[index].id
+        let watchedCount = episodeWatchedMap[mediaId]?.count ?? 0
+        let totalEpisodes = max(0, totalEpisodesOverride ?? allMedia[index].totalEpisodes ?? 0)
+
+        allMedia[index].watchedEpisodes = watchedCount
+
+        if allMedia[index].hasSeasonsAndEpisodes {
+            if totalEpisodes > 0 && watchedCount >= totalEpisodes {
+                allMedia[index].isWatched = true
+                allMedia[index].isInProgress = false
+                allMedia[index].isInQueue = false
+                watchedIds.insert(mediaId)
+                inProgressIds.remove(mediaId)
+                queueIds.remove(mediaId)
+                return
+            }
+
+            if watchedCount > 0 {
+                allMedia[index].isWatched = false
+                allMedia[index].isInProgress = true
+                watchedIds.remove(mediaId)
+                inProgressIds.insert(mediaId)
+                return
+            }
+        }
+
+        if allMedia[index].isWatched {
+            allMedia[index].isInProgress = false
+            watchedIds.insert(mediaId)
+            inProgressIds.remove(mediaId)
+        } else {
+            allMedia[index].isInProgress = inProgressIds.contains(mediaId)
+            watchedIds.remove(mediaId)
+        }
     }
 
     private func loadEpisodeData() {

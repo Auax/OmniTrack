@@ -220,6 +220,10 @@ struct DiscoverView: View {
                                 } label: {
                                     FeaturedCardView(item: item)
                                         .frame(width: cardWidth)
+                                        .overlay(
+                                            Squircle(cornerRadius: 20)
+                                                .stroke(.white.opacity(colorScheme == .dark ? 0.16 : 0.24), lineWidth: 1)
+                                        )
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -321,6 +325,10 @@ struct DiscoverPosterCard: View {
         }
         .aspectRatio(2/3, contentMode: .fit)
         .clipShape(Squircle(cornerRadius: 12))
+        .overlay(
+            Squircle(cornerRadius: 12)
+                .stroke(.white.opacity(colorScheme == .dark ? 0.16 : 0.24), lineWidth: 1)
+        )
         .shadow(color: .black.opacity(colorScheme == .dark ? 0.3 : 0.1), radius: 5, y: 3)
     }
 }

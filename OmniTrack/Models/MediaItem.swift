@@ -11,11 +11,13 @@ struct MediaItem: Identifiable, Hashable {
     let backdropPath: String?
     let rating: Double
     let year: Int
+    let releaseDateString: String?
     let genres: [String]
     var totalEpisodes: Int?
     var watchedEpisodes: Int
     var totalSeasons: Int?
     var isWatched: Bool
+    var isInProgress: Bool
     var isInQueue: Bool
     let genreIds: [Int]
     var imdbRating: Double?
@@ -32,11 +34,13 @@ struct MediaItem: Identifiable, Hashable {
         backdropPath: String?,
         rating: Double,
         year: Int,
+        releaseDateString: String? = nil,
         genres: [String],
         totalEpisodes: Int?,
         watchedEpisodes: Int,
         totalSeasons: Int?,
         isWatched: Bool,
+        isInProgress: Bool = false,
         isInQueue: Bool,
         genreIds: [Int],
         imdbRating: Double? = nil,
@@ -52,11 +56,13 @@ struct MediaItem: Identifiable, Hashable {
         self.backdropPath = backdropPath
         self.rating = rating
         self.year = year
+        self.releaseDateString = releaseDateString
         self.genres = genres
         self.totalEpisodes = totalEpisodes
         self.watchedEpisodes = watchedEpisodes
         self.totalSeasons = totalSeasons
         self.isWatched = isWatched
+        self.isInProgress = isInProgress
         self.isInQueue = isInQueue
         self.genreIds = genreIds
         self.imdbRating = imdbRating

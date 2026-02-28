@@ -3,8 +3,6 @@ import SDWebImageSwiftUI
 
 struct FeaturedCardView: View {
     let item: MediaItem
-    @Environment(SettingsManager.self) private var settings
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         Color(hex: item.accentColorHex).opacity(0.3)
@@ -32,15 +30,6 @@ struct FeaturedCardView: View {
             }
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 6) {
-                        Image(systemName: item.type.icon)
-                            .font(.caption)
-                        Text(item.type.rawValue.uppercased())
-                            .font(.caption2.weight(.bold))
-                            .tracking(1)
-                    }
-                    .foregroundStyle(.white.opacity(0.8))
-
                     Text(item.title)
                         .font(.title2.bold())
                         .foregroundStyle(.white)

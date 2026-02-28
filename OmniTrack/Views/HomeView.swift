@@ -1,4 +1,5 @@
 import SwiftUI
+import SDWebImageSwiftUI
 
 struct HomeView: View {
     let onExplore: () -> Void
@@ -31,7 +32,7 @@ struct HomeView: View {
     }
 
     private var continueWatchingItems: [MediaItem] {
-        mediaService.allMedia
+        mediaService.inProgressItemsSortedByRecentUpdate()
             .filter { item in
                 guard isTypeEnabled(item.type), item.hasSeasonsAndEpisodes, !item.isWatched else {
                     return false
@@ -45,12 +46,6 @@ struct HomeView: View {
                 }
 
                 return true
-            }
-            .sorted { lhs, rhs in
-                let lhsWatched = mediaService.watchedEpisodeCount(mediaId: lhs.id)
-                let rhsWatched = mediaService.watchedEpisodeCount(mediaId: rhs.id)
-                if lhsWatched == rhsWatched { return lhs.rating > rhs.rating }
-                return lhsWatched > rhsWatched
             }
     }
 
@@ -172,8 +167,11 @@ struct HomeView: View {
                                     Button {
                                         selectedItem = item
                                     } label: {
-                                        FeaturedCardView(item: item)
-                                            .frame(width: cardWidth)
+                                        homeGlassCard(
+                                            item: item,
+                                            cardWidth: cardWidth,
+                                            subtitle: item.subtitle
+                                        )
                                     }
                                     .buttonStyle(.plain)
                                 }
@@ -201,19 +199,11 @@ struct HomeView: View {
             Button {
                 selectedItem = item
             } label: {
-                FeaturedCardView(item: item)
-                    .frame(width: cardWidth)
+                homeGlassCard(item: item, cardWidth: cardWidth, subtitle: label)
             }
             .buttonStyle(.plain)
 
             HStack(spacing: 8) {
-                Text(label)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-
-                Spacer()
-
                 if let nextKey {
                     Button {
                         withAnimation(.snappy) {
@@ -231,10 +221,72 @@ struct HomeView: View {
                     .controlSize(.small)
                     .tint(.gray)
                 }
+
+                Spacer()
             }
             .padding(.horizontal, 4)
         }
         .frame(width: cardWidth, alignment: .leading)
+    }
+
+    private func homeGlassCard(item: MediaItem, cardWidth: CGFloat, subtitle: String?) -> some View {
+        ZStack(alignment: .bottomLeading) {
+            WebImage(url: item.backdropURL ?? item.posterURL) { image in
+                image
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: cardWidth, height: 188, alignment: .top)
+                    .clipped()
+            } placeholder: {
+                ShimmerView()
+                    .frame(width: cardWidth, height: 188)
+            }
+            .transition(.fade(duration: 0.2))
+
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .frame(height: 92)
+                .mask(
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0.0),
+                            .init(color: .black.opacity(0.70), location: 0.45),
+                            .init(color: .black, location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(maxHeight: .infinity, alignment: .bottom)
+
+            LinearGradient(
+                colors: [.clear, .black.opacity(0.44)],
+                startPoint: .center,
+                endPoint: .bottom
+            )
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.title)
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+
+                if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.82))
+                        .lineLimit(1)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+        }
+        .frame(width: cardWidth, height: 188)
+        .clipShape(Squircle(cornerRadius: 22))
+        .overlay(
+            Squircle(cornerRadius: 22)
+                .stroke(.white.opacity(colorScheme == .dark ? 0.16 : 0.25), lineWidth: 1)
+        )
     }
 
     private var emptyWatchlistView: some View {
