@@ -6,6 +6,7 @@ struct DetailEpisodeCard: View {
     let episode: Episode
     let episodeCardWidth: CGFloat
     let totalEpisodesCount: Int
+    let onToggle: () -> Void
 
     @Environment(MediaService.self) private var mediaService
     @Environment(\.colorScheme) private var colorScheme
@@ -13,15 +14,7 @@ struct DetailEpisodeCard: View {
     var body: some View {
         let isWatched = mediaService.isEpisodeWatched(mediaId: currentItem.id, key: episode.episodeKey)
 
-        Button {
-            withAnimation(.snappy) {
-                mediaService.toggleEpisodeWatched(
-                    mediaId: currentItem.id,
-                    key: episode.episodeKey,
-                    totalEpisodes: totalEpisodesCount
-                )
-            }
-        } label: {
+        Button(action: onToggle) {
             HStack(alignment: .bottom, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(episode.name.isEmpty ? "Episode \(episode.episodeNumber)" : episode.name)

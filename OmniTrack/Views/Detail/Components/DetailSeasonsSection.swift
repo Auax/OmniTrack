@@ -4,6 +4,7 @@ struct DetailSeasonsSection: View {
     let currentItem: MediaItem
     let episodeCardWidth: CGFloat
     let totalEpisodesCount: Int
+    @Binding var autoFocusEpisodeKey: EpisodeKey?
     
     @Binding var seasons: [Season]
     @Binding var isLoadingSeasons: Bool
@@ -24,6 +25,7 @@ struct DetailSeasonsSection: View {
                     currentItem: currentItem,
                     episodeCardWidth: episodeCardWidth,
                     totalEpisodesCount: totalEpisodesCount,
+                    autoFocusEpisodeKey: $autoFocusEpisodeKey,
                     seasons: seasons,
                     expandedSeason: $expandedSeason,
                     loadingSeasonNumbers: $loadingSeasonNumbers,
@@ -32,12 +34,21 @@ struct DetailSeasonsSection: View {
                 )
             }
             .onAppear {
-                if expandedSeason == nil {
+                if let autoFocusEpisodeKey {
+                    expandedSeason = autoFocusEpisodeKey.season
+                } else if expandedSeason == nil {
                     expandedSeason = seasons.first?.seasonNumber
                 }
-                if selectedSeason.episodes.isEmpty {
-                    onLoadEpisodesForSeason(selectedSeason.seasonNumber)
-                }
+                loadSeasonIfNeeded(expandedSeason)
+            }
+            .onChange(of: autoFocusEpisodeKey?.rawValue) { _, _ in
+                alignToAutoFocusSeasonIfNeeded()
+            }
+            .onChange(of: seasons.map(\.seasonNumber)) { _, _ in
+                alignToAutoFocusSeasonIfNeeded()
+            }
+            .onChange(of: expandedSeason) { _, newSeason in
+                loadSeasonIfNeeded(newSeason)
             }
         } else if currentItem.hasSeasonsAndEpisodes && isLoadingSeasons {
             VStack(alignment: .leading, spacing: 12) {
@@ -76,6 +87,24 @@ struct DetailSeasonsSection: View {
         return seasons.first
     }
 
+    private func alignToAutoFocusSeasonIfNeeded() {
+        guard let autoFocusEpisodeKey else { return }
+        guard seasons.contains(where: { $0.seasonNumber == autoFocusEpisodeKey.season }) else { return }
+
+        if expandedSeason != autoFocusEpisodeKey.season {
+            expandedSeason = autoFocusEpisodeKey.season
+        }
+        loadSeasonIfNeeded(autoFocusEpisodeKey.season)
+    }
+
+    private func loadSeasonIfNeeded(_ seasonNumber: Int?) {
+        guard let seasonNumber else { return }
+        guard let targetSeason = seasons.first(where: { $0.seasonNumber == seasonNumber }) else { return }
+        guard targetSeason.episodes.isEmpty else { return }
+        guard !loadingSeasonNumbers.contains(seasonNumber) else { return }
+        onLoadEpisodesForSeason(seasonNumber)
+    }
+
 }
 
 struct DetailSeasonRow: View {
@@ -83,6 +112,7 @@ struct DetailSeasonRow: View {
     let currentItem: MediaItem
     let episodeCardWidth: CGFloat
     let totalEpisodesCount: Int
+    @Binding var autoFocusEpisodeKey: EpisodeKey?
     
     let seasons: [Season]
     @Binding var expandedSeason: Int?
@@ -185,16 +215,31 @@ struct DetailSeasonRow: View {
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 8)
             } else {
-                ScrollView(.horizontal) {
-                    HStack(spacing: 12) {
-                        ForEach(season.episodes) { episode in
-                            DetailEpisodeCard(
-                                currentItem: currentItem,
-                                episode: episode,
-                                episodeCardWidth: episodeCardWidth,
-                                totalEpisodesCount: totalEpisodesCount
-                            )
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal) {
+                        HStack(spacing: 12) {
+                            ForEach(season.episodes) { episode in
+                                DetailEpisodeCard(
+                                    currentItem: currentItem,
+                                    episode: episode,
+                                    episodeCardWidth: episodeCardWidth,
+                                    totalEpisodesCount: totalEpisodesCount,
+                                    onToggle: {
+                                        handleEpisodeToggle(episode)
+                                    }
+                                )
+                                .id(episode.episodeKey)
+                            }
                         }
+                    }
+                    .onAppear {
+                        scrollToAutoFocusEpisode(using: proxy)
+                    }
+                    .onChange(of: autoFocusEpisodeKey?.rawValue) { _, _ in
+                        scrollToAutoFocusEpisode(using: proxy)
+                    }
+                    .onChange(of: season.episodes.map(\.episodeKey)) { _, _ in
+                        scrollToAutoFocusEpisode(using: proxy)
                     }
                     .padding(.horizontal, 20)
                 }
@@ -233,5 +278,59 @@ struct DetailSeasonRow: View {
     private func displaySeasonTitle(_ season: Season) -> String {
         let cleaned = season.name.trimmingCharacters(in: .whitespacesAndNewlines)
         return cleaned.isEmpty ? "Season \(season.seasonNumber)" : cleaned
+    }
+
+    private func handleEpisodeToggle(_ episode: Episode) {
+        let wasWatched = mediaService.isEpisodeWatched(mediaId: currentItem.id, key: episode.episodeKey)
+
+        withAnimation(.snappy) {
+            mediaService.toggleEpisodeWatched(
+                mediaId: currentItem.id,
+                key: episode.episodeKey,
+                totalEpisodes: totalEpisodesCount
+            )
+        }
+
+        guard !wasWatched else { return }
+        autoFocusEpisodeKey = nextUnwatchedEpisode(after: episode)
+    }
+
+    private func nextUnwatchedEpisode(after episode: Episode) -> EpisodeKey? {
+        let watchedKeys = mediaService.watchedEpisodeKeys(mediaId: currentItem.id)
+        let orderedSeasons = seasons.sorted { $0.seasonNumber < $1.seasonNumber }
+        var passedCurrent = false
+
+        for season in orderedSeasons where season.episodeCount > 0 {
+            for episodeNumber in 1...season.episodeCount {
+                let key = EpisodeKey(season: season.seasonNumber, episode: episodeNumber)
+                if !passedCurrent {
+                    if key.rawValue == episode.episodeKey {
+                        passedCurrent = true
+                    }
+                    continue
+                }
+
+                if !watchedKeys.contains(key.rawValue) {
+                    return key
+                }
+            }
+        }
+
+        return nil
+    }
+
+    private func scrollToAutoFocusEpisode(using proxy: ScrollViewProxy) {
+        guard let focusEpisodeKey = autoFocusEpisodeKey else { return }
+        guard focusEpisodeKey.season == season.seasonNumber else { return }
+
+        let targetKey = focusEpisodeKey.rawValue
+        guard season.episodes.contains(where: { $0.episodeKey == targetKey }) else { return }
+
+        Task { @MainActor in
+            withAnimation(.snappy) {
+                proxy.scrollTo(targetKey, anchor: .center)
+            }
+            autoFocusEpisodeKey = nil
+        }
     }
 }

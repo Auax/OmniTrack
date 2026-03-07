@@ -6,6 +6,7 @@ import UIKit
 
 struct DetailView: View {
     let item: MediaItem
+    let continueFocusEpisodeKey: EpisodeKey?
     @Environment(MediaService.self) private var mediaService
     @Environment(SettingsManager.self) private var settings
     @Environment(\.colorScheme) private var colorScheme
@@ -13,6 +14,13 @@ struct DetailView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var viewModel = DetailViewModel()
+    @State private var pendingContinueFocusEpisodeKey: EpisodeKey?
+
+    init(item: MediaItem, continueFocusEpisodeKey: EpisodeKey? = nil) {
+        self.item = item
+        self.continueFocusEpisodeKey = continueFocusEpisodeKey
+        _pendingContinueFocusEpisodeKey = State(initialValue: continueFocusEpisodeKey)
+    }
 
     private var currentItem: MediaItem {
         mediaService.allMedia.first(where: { $0.id == item.id }) ?? item
@@ -80,6 +88,7 @@ struct DetailView: View {
                         currentItem: currentItem,
                         episodeCardWidth: episodeCardWidth,
                         totalEpisodesCount: viewModel.totalEpisodesCount,
+                        autoFocusEpisodeKey: $pendingContinueFocusEpisodeKey,
                         seasons: Bindable(viewModel).seasons,
                         isLoadingSeasons: Bindable(viewModel).isLoadingSeasons,
                         fetchError: Bindable(viewModel).fetchError,
@@ -104,6 +113,11 @@ struct DetailView: View {
         .presentationCornerRadius(24)
         .task {
             await viewModel.loadTVDetails(for: currentItem)
+            if let focusEpisode = pendingContinueFocusEpisodeKey,
+               viewModel.seasons.contains(where: { $0.seasonNumber == focusEpisode.season }) {
+                viewModel.expandedSeason = focusEpisode.season
+                viewModel.loadEpisodesForSeason(focusEpisode.season, currentItem: currentItem)
+            }
             if settings.ratingProvider == .imdb {
                 _ = await mediaService.fetchImdbRatingForItem(currentItem)
             }

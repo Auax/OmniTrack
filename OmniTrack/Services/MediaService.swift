@@ -152,6 +152,27 @@ class MediaService {
         return ordered + fallback
     }
 
+    func queueItemsSortedByRecentAddition(type: MediaType? = nil) -> [MediaItem] {
+        let ordered = recentItems(
+            from: queueAddedOrder,
+            type: type,
+            limit: .max
+        ) { item in
+            !item.isWatched && (item.isInQueue || !(episodeQueueMap[item.id]?.isEmpty ?? true))
+        }
+
+        let seenIds = Set(ordered.map(\.id))
+        let fallback = queueItems
+            .filter { item in
+                guard !item.isWatched, !seenIds.contains(item.id) else { return false }
+                if let type { return item.type == type }
+                return true
+            }
+            .sortedForLibrary()
+
+        return ordered + fallback
+    }
+
     func recentWatchedItems(type: MediaType, limit: Int) -> [MediaItem] {
         let ordered = recentItems(
             from: watchedAddedOrder,
@@ -172,6 +193,27 @@ class MediaService {
                 .suffix(max(0, limit - ordered.count))
                 .reversed()
         )
+
+        return ordered + fallback
+    }
+
+    func watchedItemsSortedByRecentAddition(type: MediaType? = nil) -> [MediaItem] {
+        let ordered = recentItems(
+            from: watchedAddedOrder,
+            type: type,
+            limit: .max
+        ) { item in
+            item.isWatched
+        }
+
+        let seenIds = Set(ordered.map(\.id))
+        let fallback = watchedItems
+            .filter { item in
+                guard item.isWatched, !seenIds.contains(item.id) else { return false }
+                if let type { return item.type == type }
+                return true
+            }
+            .sortedForLibrary()
 
         return ordered + fallback
     }
@@ -1464,6 +1506,38 @@ class MediaService {
 
     // MARK: - Mapping
 
+    func clearAllSavedData() {
+        watchedIds.removeAll()
+        inProgressIds.removeAll()
+        queueIds.removeAll()
+        watchedAddedOrder.removeAll()
+        queueAddedOrder.removeAll()
+        inProgressUpdatedOrder.removeAll()
+        episodeWatchedMap.removeAll()
+        episodeQueueMap.removeAll()
+        watchedDates.removeAll()
+
+        applyUserData()
+        applyEpisodeCounts()
+        applySavedState(to: &featuredMovies)
+        applySavedState(to: &featuredTVShows)
+        applySavedState(to: &featuredAnime)
+        applySavedState(to: &searchResults)
+        applySavedState(to: &genreMedia)
+        applySavedState(to: &discoverMedia)
+
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: "watchedIds")
+        defaults.removeObject(forKey: "inProgressIds")
+        defaults.removeObject(forKey: "queueIds")
+        defaults.removeObject(forKey: "watchedAddedOrder")
+        defaults.removeObject(forKey: "queueAddedOrder")
+        defaults.removeObject(forKey: "inProgressUpdatedOrder")
+        defaults.removeObject(forKey: "episodeWatchedMap")
+        defaults.removeObject(forKey: "episodeQueueMap")
+        defaults.removeObject(forKey: "watchedDates")
+    }
+
     func mapAniListAnime(_ anime: AniListAnime) -> MediaItem {
         mapAniListSeries(
             entries: [anime],
@@ -1543,9 +1617,19 @@ class MediaService {
         }
     }
 
+    private func applySavedState(to items: inout [MediaItem]) {
+        for i in items.indices {
+            let mediaId = items[i].id
+            items[i].isWatched = watchedIds.contains(mediaId)
+            items[i].isInProgress = inProgressIds.contains(mediaId) && !items[i].isWatched
+            items[i].isInQueue = queueIds.contains(mediaId)
+            items[i].watchedEpisodes = episodeWatchedMap[mediaId]?.count ?? 0
+        }
+    }
+
     private func recentItems(
         from order: [Int],
-        type: MediaType,
+        type: MediaType?,
         limit: Int,
         where include: (MediaItem) -> Bool
     ) -> [MediaItem] {
@@ -1556,7 +1640,8 @@ class MediaService {
         for id in order.reversed() {
             guard !seen.contains(id) else { continue }
             guard let item = allMedia.first(where: { $0.id == id }) else { continue }
-            guard item.type == type, include(item) else { continue }
+            if let type, item.type != type { continue }
+            guard include(item) else { continue }
             seen.insert(id)
             items.append(item)
             if items.count >= limit {

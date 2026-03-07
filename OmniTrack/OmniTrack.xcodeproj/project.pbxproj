@@ -47,6 +47,7 @@
 		B78E4126BA39F707FA6888BD /* Color+Hex.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EF2ED21B9EFFC8D0FD8CC6B /* Color+Hex.swift */; };
 		B817F4A1E0581F80CADE0795 /* DateFormatter+Library.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5473A15133A0AB054A5ECEF /* DateFormatter+Library.swift */; };
 		BD552110768D6F5D05183D32 /* ActivityBarChart.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8AFF658B4870BAE403669BA /* ActivityBarChart.swift */; };
+		BE2C4281546201F6FBEE6A81 /* MediaCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFEAE121D91ED327D9087A3F /* MediaCard.swift */; };
 		C325111FFFB7218619B8FF2B /* AniListService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7957936C9E773540BE31A01A /* AniListService.swift */; };
 		C4B8D0FBB5C29B8C7F69CB28 /* OmniTrack.xcodeproj in Resources */ = {isa = PBXBuildFile; fileRef = 39B8E29EF49AEA8479CF47DC /* OmniTrack.xcodeproj */; };
 		D52B59E931FF29AAA45076CC /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E5D1E1E562F1043E9425589 /* SettingsView.swift */; };
@@ -120,6 +121,7 @@
 		E9727DD3527BE29515B2CF76 /* DetailProgressSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailProgressSection.swift; sourceTree = "<group>"; };
 		EE0EE9A97DF3CEDB7DEBE08B /* settings.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = settings.json; sourceTree = "<group>"; };
 		FBCC0EAE0CAEB4B90119DB45 /* SettingsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsManager.swift; sourceTree = "<group>"; };
+		FFEAE121D91ED327D9087A3F /* MediaCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaCard.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -134,7 +136,7 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		0954FCBF2F5C321C00F99DC9 /* Products */ = {
+		0954FCC12F5C394300F99DC9 /* Products */ = {
 			isa = PBXGroup;
 			name = Products;
 			sourceTree = "<group>";
@@ -143,6 +145,7 @@
 			isa = PBXGroup;
 			children = (
 				E4CD973DC38D1F3EBCE1100A /* EpisodeSkeletonCard.swift */,
+				FFEAE121D91ED327D9087A3F /* MediaCard.swift */,
 				E238BDF10CD9E2E6AF4F2775 /* PosterCard.swift */,
 				245A9F3EFE59E204C00E9737 /* ShimmerView.swift */,
 			);
@@ -370,7 +373,7 @@
 			projectDirPath = "";
 			projectReferences = (
 				{
-					ProductGroup = 0954FCBF2F5C321C00F99DC9 /* Products */;
+					ProductGroup = 0954FCC12F5C394300F99DC9 /* Products */;
 					ProjectRef = 39B8E29EF49AEA8479CF47DC /* OmniTrack.xcodeproj */;
 				},
 			);
@@ -431,6 +434,7 @@
 				0FFE9C58E78761C0B3BF74EC /* LibraryModels.swift in Sources */,
 				1A5398D3E9C83A37828C513A /* LibraryView.swift in Sources */,
 				DC781102B222A328B5444573 /* LibraryViewModel.swift in Sources */,
+				BE2C4281546201F6FBEE6A81 /* MediaCard.swift in Sources */,
 				29A5B2BBE6D6975427022DF5 /* MediaCardView.swift in Sources */,
 				10A0BDDC17CED3A0A7D582F1 /* MediaItem+Library.swift in Sources */,
 				FC2E72946F7140381CB8C53B /* MediaItem.swift in Sources */,

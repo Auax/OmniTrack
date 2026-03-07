@@ -1,5 +1,4 @@
 import SwiftUI
-import SDWebImageSwiftUI
 
 struct HomeView: View {
     let onExplore: () -> Void
@@ -9,6 +8,8 @@ struct HomeView: View {
 
     @State private var selectedItem: MediaItem?
     @State private var hasLoaded: Bool = false
+    @State private var continueViewModel = LibraryViewModel()
+    @State private var continueFocusEpisodeKey: EpisodeKey?
 
     init(onExplore: @escaping () -> Void = {}) {
         self.onExplore = onExplore
@@ -27,8 +28,8 @@ struct HomeView: View {
     }
 
     private var watchlistItems: [MediaItem] {
-        mediaService.queueItems
-            .filter { isTypeEnabled($0.type) && !$0.isWatched }
+        mediaService.queueItemsSortedByRecentAddition()
+            .filter { isTypeEnabled($0.type) }
     }
 
     private var continueWatchingItems: [MediaItem] {
@@ -98,10 +99,13 @@ struct HomeView: View {
                     showAnime: settings.showAnime
                 )
             }
-            .sheet(item: $selectedItem) { item in
-                DetailView(item: item)
+            .sheet(item: $selectedItem, onDismiss: {
+                continueFocusEpisodeKey = nil
+            }) { item in
+                DetailView(item: item, continueFocusEpisodeKey: continueFocusEpisodeKey)
             }
             .task {
+                continueViewModel.trimContinuePreviewCache(validItems: continueWatchingItems)
                 guard !hasLoaded else { return }
                 hasLoaded = true
                 await mediaService.loadContent(
@@ -115,6 +119,9 @@ struct HomeView: View {
             .onChange(of: settings.showAnime) { _, _ in reloadContent() }
             .onChange(of: settings.animeSource) { _, _ in reloadContent() }
             .onChange(of: settings.animeTitlePreference) { _, _ in reloadContent() }
+            .onChange(of: continueWatchingItems.map(\.id)) { _, _ in
+                continueViewModel.trimContinuePreviewCache(validItems: continueWatchingItems)
+            }
         }
     }
 
@@ -162,15 +169,23 @@ struct HomeView: View {
                         HStack(spacing: 14) {
                             ForEach(items.prefix(12)) { item in
                                 if showsContinueActions && item.hasSeasonsAndEpisodes {
-                                    HomeContinueWatchingCard(item: item, cardWidth: cardWidth, selectedItem: $selectedItem)
+                                    HomeContinueWatchingCardBuilder(
+                                        item: item,
+                                        cardWidth: cardWidth,
+                                        selectedItem: $selectedItem,
+                                        continueFocusEpisodeKey: $continueFocusEpisodeKey,
+                                        viewModel: continueViewModel
+                                    )
                                 } else {
                                     Button {
+                                        continueFocusEpisodeKey = nil
                                         selectedItem = item
                                     } label: {
-                                        HomeGlassCard(
-                                            item: item,
-                                            cardWidth: cardWidth,
-                                            subtitle: item.subtitle
+                                        MediaCard(
+                                            imageURL: item.backdropURL ?? item.posterURL,
+                                            title: item.title,
+                                            subtitle: item.subtitle,
+                                            cardWidth: cardWidth
                                         )
                                     }
                                     .buttonStyle(.plain)
@@ -182,7 +197,7 @@ struct HomeView: View {
                     .scrollIndicators(.hidden)
                     .scrollTargetBehavior(.viewAligned)
                 }
-                .frame(height: showsContinueActions ? 270 : 220)
+                .frame(height: showsContinueActions ? 246 : 220)
             }
         }
     }
@@ -233,118 +248,37 @@ struct HomeView: View {
     }
 }
 
-private struct HomeContinueWatchingCard: View {
+private struct HomeContinueWatchingCardBuilder: View {
     let item: MediaItem
     let cardWidth: CGFloat
     @Binding var selectedItem: MediaItem?
+    @Binding var continueFocusEpisodeKey: EpisodeKey?
+    @Bindable var viewModel: LibraryViewModel
     @Environment(MediaService.self) private var mediaService
+    @Environment(SettingsManager.self) private var settings
 
     var body: some View {
-        let nextKey = MediaProgressResolver.nextEpisodeKey(
-            watchedKeys: mediaService.watchedEpisodeKeys(mediaId: item.id),
-            totalEpisodes: item.totalEpisodes,
-            isWatched: item.isWatched
-        )
-        let label = MediaProgressResolver.displayLabel(for: nextKey, style: .home)
+        let preview = viewModel.previewForCard(item, mediaService: mediaService)
+        let seriesTitle = item.preferredDisplayTitle(animeTitlePreference: settings.animeTitlePreference)
+        let stateKey = viewModel.continuePreviewStateKey(for: item, mediaService: mediaService)
+        let continueTarget = viewModel.continueTarget(for: item, mediaService: mediaService)
+        let previewKey = "\(stateKey)|\(continueTarget?.episode.rawValue ?? "none")|\(continueTarget?.totalEpisodes ?? 0)"
 
-        VStack(alignment: .leading, spacing: 8) {
-            Button {
+        ContinueWatchingCard(
+            item: item,
+            cardWidth: cardWidth,
+            preview: preview,
+            seriesTitle: seriesTitle,
+            cardMetaLine: preview.metaLine,
+            previewKey: previewKey,
+            onSelect: {
+                continueFocusEpisodeKey = continueTarget?.episode
                 selectedItem = item
-            } label: {
-                HomeGlassCard(item: item, cardWidth: cardWidth, subtitle: label)
+            },
+            onTask: {
+                await viewModel.loadContinueTargetIfNeeded(for: item, stateKey: stateKey, mediaService: mediaService)
+                await viewModel.loadContinuePreviewIfNeeded(for: item, previewKey: previewKey, mediaService: mediaService)
             }
-            .buttonStyle(.plain)
-
-            HStack(spacing: 8) {
-                if let nextKey {
-                    Button {
-                        withAnimation(.snappy) {
-                            mediaService.markEpisodeWatched(
-                                mediaId: item.id,
-                                key: nextKey,
-                                totalEpisodes: item.totalEpisodes ?? 0
-                            )
-                        }
-                    } label: {
-                        Label("Mark Episode", systemImage: "checkmark.circle.fill")
-                            .font(.caption.weight(.semibold))
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .tint(.gray)
-                }
-
-                Spacer()
-            }
-            .padding(.horizontal, 4)
-        }
-        .frame(width: cardWidth, alignment: .leading)
-    }
-}
-
-private struct HomeGlassCard: View {
-    let item: MediaItem
-    let cardWidth: CGFloat
-    let subtitle: String?
-    @Environment(\.colorScheme) private var colorScheme
-
-    var body: some View {
-        ZStack(alignment: .bottomLeading) {
-            WebImage(url: item.backdropURL ?? item.posterURL) { image in
-                image
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: cardWidth, height: 188, alignment: .top)
-                    .clipped()
-            } placeholder: {
-                ShimmerView()
-                    .frame(width: cardWidth, height: 188)
-            }
-            .transition(.fade(duration: 0.2))
-
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .frame(height: 92)
-                .mask(
-                    LinearGradient(
-                        stops: [
-                            .init(color: .clear, location: 0.0),
-                            .init(color: .black.opacity(0.70), location: 0.45),
-                            .init(color: .black, location: 1.0)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .frame(maxHeight: .infinity, alignment: .bottom)
-
-            LinearGradient(
-                colors: [.clear, .black.opacity(0.44)],
-                startPoint: .center,
-                endPoint: .bottom
-            )
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(item.title)
-                    .font(.title2.weight(.bold))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-
-                if let subtitle, !subtitle.isEmpty {
-                    Text(subtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.82))
-                        .lineLimit(1)
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-        }
-        .frame(width: cardWidth, height: 188)
-        .clipShape(Squircle(cornerRadius: 22))
-        .overlay(
-            Squircle(cornerRadius: 22)
-                .stroke(.white.opacity(colorScheme == .dark ? 0.16 : 0.25), lineWidth: 1)
         )
     }
 }
@@ -373,7 +307,8 @@ private struct HomeSectionHeader: View {
     var body: some View {
         HStack {
             Text(title)
-                .font(.title3.weight(.semibold))
+                .font(.title2.weight(.bold))
+                
             Spacer()
         }
     }

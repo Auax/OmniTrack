@@ -60,15 +60,12 @@ struct LibraryCollectionPage: View {
     @State private var selectedItem: MediaItem?
 
     private var items: [MediaItem] {
-        let source: [MediaItem]
         switch route.kind {
         case .watchlist:
-            source = mediaService.queueItems.filter { $0.type == route.type && !$0.isWatched }
+            return mediaService.queueItemsSortedByRecentAddition(type: route.type)
         case .watched:
-            source = mediaService.watchedItems.filter { $0.type == route.type && $0.isWatched }
+            return mediaService.watchedItemsSortedByRecentAddition(type: route.type)
         }
-
-        return source.sortedForLibrary()
     }
 
     private var gridColumns: [GridItem] {

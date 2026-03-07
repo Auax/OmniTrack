@@ -11,7 +11,6 @@ final class DetailViewModel {
     var tvDetail: TMDBTVDetail?
 
     private let tmdbService = TMDBService()
-    private var episodeLoadTask: Task<Void, Never>?
 
     var totalEpisodesCount: Int {
         seasons.reduce(0) { $0 + $1.episodeCount }
@@ -67,8 +66,7 @@ final class DetailViewModel {
     }
 
     func loadEpisodesForSeason(_ seasonNumber: Int, currentItem: MediaItem) {
-        episodeLoadTask?.cancel()
-        episodeLoadTask = Task { @MainActor in
+        Task { @MainActor in
             guard !loadingSeasonNumbers.contains(seasonNumber) else { return }
             loadingSeasonNumbers.insert(seasonNumber)
 

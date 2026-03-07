@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(MediaService.self) private var mediaService
     @Environment(SettingsManager.self) private var settings
+    @State private var showingClearDataAlert = false
 
     var body: some View {
         @Bindable var settings = settings
@@ -96,6 +97,18 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Button(role: .destructive) {
+                        showingClearDataAlert = true
+                    } label: {
+                        Label("Remove All Saved Data", systemImage: "trash")
+                    }
+                } header: {
+                    Text("Data")
+                } footer: {
+                    Text("Removes watchlist, watched history, and episode progress from this device.")
+                }
+
+                Section {
                     HStack {
                         Text("Version")
                         Spacer()
@@ -124,6 +137,14 @@ struct SettingsView: View {
             }
             .onChange(of: settings.animeTitlePreference) { _, _ in
                 reloadMediaData()
+            }
+            .alert("Remove All Saved Data?", isPresented: $showingClearDataAlert) {
+                Button("Cancel", role: .cancel) {}
+                Button("Remove", role: .destructive) {
+                    mediaService.clearAllSavedData()
+                }
+            } message: {
+                Text("This action cannot be undone.")
             }
         }
     }

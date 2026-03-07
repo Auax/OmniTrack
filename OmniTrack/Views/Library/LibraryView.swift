@@ -18,6 +18,7 @@ struct LibraryView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     @State private var viewModel = LibraryViewModel()
+    @State private var continueFocusEpisodeKey: EpisodeKey?
 
     private var continueWatchingItems: [MediaItem] {
         mediaService.inProgressItemsSortedByRecentUpdate()
@@ -53,8 +54,10 @@ struct LibraryView: View {
             .navigationDestination(isPresented: $viewModel.showingContinueWatchingPage) {
                 continueWatchingPage
             }
-            .sheet(item: $viewModel.selectedItem) { item in
-                DetailView(item: item)
+            .sheet(item: $viewModel.selectedItem, onDismiss: {
+                continueFocusEpisodeKey = nil
+            }) { item in
+                DetailView(item: item, continueFocusEpisodeKey: continueFocusEpisodeKey)
             }
             .onChange(of: continueWatchingItems.map(\.id)) { _, _ in
                 viewModel.trimContinuePreviewCache(validItems: continueWatchingItems)
@@ -111,7 +114,8 @@ struct LibraryView: View {
                             LibraryContinueWatchingCardBuilder(
                                 item: item,
                                 cardWidth: cardWidth,
-                                viewModel: viewModel
+                                viewModel: viewModel,
+                                continueFocusEpisodeKey: $continueFocusEpisodeKey
                             )
                         }
                     }
@@ -198,11 +202,11 @@ struct LibraryView: View {
     }
 
     private func watchlistItems(for type: MediaType) -> [MediaItem] {
-        mediaService.queueItems.filter { $0.type == type && !$0.isWatched }.sortedForLibrary()
+        mediaService.queueItemsSortedByRecentAddition(type: type)
     }
 
     private func watchedItems(for type: MediaType) -> [MediaItem] {
-        mediaService.watchedItems.filter { $0.type == type && $0.isWatched }.sortedForLibrary()
+        mediaService.watchedItemsSortedByRecentAddition(type: type)
     }
 }
 
@@ -210,13 +214,16 @@ private struct LibraryContinueWatchingCardBuilder: View {
     let item: MediaItem
     let cardWidth: CGFloat
     @Bindable var viewModel: LibraryViewModel
+    @Binding var continueFocusEpisodeKey: EpisodeKey?
     @Environment(MediaService.self) private var mediaService
     @Environment(SettingsManager.self) private var settings
 
     var body: some View {
         let preview = viewModel.previewForCard(item, mediaService: mediaService)
         let seriesTitle = item.preferredDisplayTitle(animeTitlePreference: settings.animeTitlePreference)
-        let previewKey = viewModel.continuePreviewStateKey(for: item, mediaService: mediaService)
+        let stateKey = viewModel.continuePreviewStateKey(for: item, mediaService: mediaService)
+        let continueTarget = viewModel.continueTarget(for: item, mediaService: mediaService)
+        let previewKey = "\(stateKey)|\(continueTarget?.episode.rawValue ?? "none")|\(continueTarget?.totalEpisodes ?? 0)"
         let cardMetaLine = preview.isLastEpisode
             ? (preview.metaLine.isEmpty ? "Last episode" : "\(preview.metaLine) • Last episode")
             : preview.metaLine
@@ -228,9 +235,12 @@ private struct LibraryContinueWatchingCardBuilder: View {
             seriesTitle: seriesTitle,
             cardMetaLine: cardMetaLine,
             previewKey: previewKey,
-            onSelect: { viewModel.selectedItem = item },
+            onSelect: {
+                continueFocusEpisodeKey = continueTarget?.episode
+                viewModel.selectedItem = item
+            },
             onTask: {
-                await viewModel.loadContinueTargetIfNeeded(for: item, stateKey: previewKey, mediaService: mediaService)
+                await viewModel.loadContinueTargetIfNeeded(for: item, stateKey: stateKey, mediaService: mediaService)
                 await viewModel.loadContinuePreviewIfNeeded(for: item, previewKey: previewKey, mediaService: mediaService)
             }
         )
@@ -245,9 +255,10 @@ private struct LibraryContinueWatchingRowBuilder: View {
 
     var body: some View {
         let preview = viewModel.previewForCard(item, mediaService: mediaService)
-        let previewKey = viewModel.continuePreviewStateKey(for: item, mediaService: mediaService)
+        let stateKey = viewModel.continuePreviewStateKey(for: item, mediaService: mediaService)
         let seriesTitle = item.preferredDisplayTitle(animeTitlePreference: settings.animeTitlePreference)
         let target = viewModel.continueTarget(for: item, mediaService: mediaService)
+        let previewKey = "\(stateKey)|\(target?.episode.rawValue ?? "none")|\(target?.totalEpisodes ?? 0)"
         let nextKey = target?.episode
         let isMarking = viewModel.isMarkingContinueToken(item, target: target)
 
@@ -262,7 +273,7 @@ private struct LibraryContinueWatchingRowBuilder: View {
                 viewModel.markContinueEpisodeWatched(item: item, target: target, mediaService: mediaService)
             },
             onTask: {
-                await viewModel.loadContinueTargetIfNeeded(for: item, stateKey: previewKey, mediaService: mediaService)
+                await viewModel.loadContinueTargetIfNeeded(for: item, stateKey: stateKey, mediaService: mediaService)
                 await viewModel.loadContinuePreviewIfNeeded(for: item, previewKey: previewKey, mediaService: mediaService)
             }
         )
@@ -327,11 +338,11 @@ private struct LibraryMediaCategorySection: View {
     }
 
     private func watchlistItems(for type: MediaType) -> [MediaItem] {
-        mediaService.queueItems.filter { $0.type == type && !$0.isWatched }.sortedForLibrary()
+        mediaService.queueItemsSortedByRecentAddition(type: type)
     }
 
     private func watchedItems(for type: MediaType) -> [MediaItem] {
-        mediaService.watchedItems.filter { $0.type == type && $0.isWatched }.sortedForLibrary()
+        mediaService.watchedItemsSortedByRecentAddition(type: type)
     }
 }
 
