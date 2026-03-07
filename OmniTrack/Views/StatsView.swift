@@ -121,97 +121,42 @@ struct StatsView: View {
                 Spacer()
             }
 
-            categoryRow(
+            StatCategoryRow(
                 icon: "film",
                 label: "Movies",
                 color: .blue,
                 watchedCount: mediaService.watchedItems.filter { $0.type == .movie }.count,
                 queueCount: mediaService.queueItems.filter { $0.type == .movie }.count,
                 onWatched: { drillDownType = .moviesWatched },
-                onQueue: { drillDownType = .moviesQueue }
+                onQueue: { drillDownType = .moviesQueue },
+                colorScheme: colorScheme
             )
 
-            categoryRow(
+            StatCategoryRow(
                 icon: "tv",
                 label: "TV Shows",
                 color: .purple,
                 watchedCount: mediaService.watchedItems.filter { $0.type == .tvShow }.count,
                 queueCount: mediaService.queueItems.filter { $0.type == .tvShow }.count,
                 onWatched: { drillDownType = .tvWatched },
-                onQueue: { drillDownType = .tvQueue }
+                onQueue: { drillDownType = .tvQueue },
+                colorScheme: colorScheme
             )
 
-            categoryRow(
+            StatCategoryRow(
                 icon: "sparkles.tv",
                 label: "Anime",
                 color: .pink,
                 watchedCount: mediaService.watchedItems.filter { $0.type == .anime }.count,
                 queueCount: mediaService.queueItems.filter { $0.type == .anime }.count,
                 onWatched: { drillDownType = .animeWatched },
-                onQueue: { drillDownType = .animeQueue }
+                onQueue: { drillDownType = .animeQueue },
+                colorScheme: colorScheme
             )
         }
     }
 
-    private func categoryRow(
-        icon: String,
-        label: String,
-        color: Color,
-        watchedCount: Int,
-        queueCount: Int,
-        onWatched: @escaping () -> Void,
-        onQueue: @escaping () -> Void
-    ) -> some View {
-        HStack(spacing: 12) {
-            // Category icon
-            Image(systemName: icon)
-                .font(.headline)
-                .foregroundStyle(color)
-                .frame(width: 36, height: 36)
-                .background(color.opacity(0.12))
-                .clipShape(Circle())
 
-            Text(label)
-                .font(.subheadline.weight(.semibold))
-
-            Spacer()
-
-            // Watched pill
-            Button(action: onWatched) {
-                HStack(spacing: 4) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.green)
-                    Text("\(watchedCount)")
-                        .font(.caption.weight(.bold))
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(.green.opacity(0.1))
-                .clipShape(Capsule())
-            }
-            .buttonStyle(.plain)
-
-            // Queue pill
-            Button(action: onQueue) {
-                HStack(spacing: 4) {
-                    Image(systemName: "bookmark.fill")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.orange)
-                    Text("\(queueCount)")
-                        .font(.caption.weight(.bold))
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(.orange.opacity(0.1))
-                .clipShape(Capsule())
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(14)
-        .background(AppTheme.adaptiveCardBackground(colorScheme))
-        .clipShape(Squircle(cornerRadius: 14))
-    }
 
     // MARK: - Recently Watched
 
@@ -243,7 +188,7 @@ struct StatsView: View {
                             Button {
                                 selectedItem = item
                             } label: {
-                                recentCard(item)
+                                StatRecentCard(item: item)
                             }
                             .buttonStyle(.plain)
                         }
@@ -256,39 +201,7 @@ struct StatsView: View {
         .padding(.bottom, 20)
     }
 
-    private func recentCard(_ item: MediaItem) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ZStack {
-                LinearGradient(
-                    colors: [item.accentColor.opacity(0.4), item.accentColor.opacity(0.15)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
 
-                WebImage(url: item.posterURL) { image in
-                    image.resizable().aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    if item.posterURL == nil {
-                        Image(systemName: item.type.icon)
-                            .font(.title2)
-                            .foregroundStyle(item.accentColor.opacity(0.6))
-                    } else {
-                        ShimmerView()
-                    }
-                }
-                .transition(.fade(duration: 0.2))
-                .id(item.posterURL)
-                .allowsHitTesting(false)
-            }
-            .frame(width: 110, height: 160)
-            .clipShape(Squircle(cornerRadius: 10))
-
-            Text(item.title)
-                .font(.caption.weight(.medium))
-                .lineLimit(1)
-                .frame(width: 110, alignment: .leading)
-        }
-    }
 }
 
 // MARK: - Drill-Down List
@@ -347,9 +260,9 @@ struct DrillDownListView: View {
                 if showTypeFilter && availableTypes.count > 1 {
                     ScrollView(.horizontal) {
                         HStack(spacing: 8) {
-                            filterChip(nil, label: "All")
+                            StatFilterChip(type: nil, label: "All", filterType: $filterType)
                             ForEach(availableTypes) { t in
-                                filterChip(t, label: t.rawValue)
+                                StatFilterChip(type: t, label: t.rawValue, filterType: $filterType)
                             }
                         }
                     }
@@ -370,7 +283,7 @@ struct DrillDownListView: View {
                         Button {
                             selectedItem = item
                         } label: {
-                            drillDownRow(item)
+                            StatDrillDownRow(item: item)
                         }
                         .listRowBackground(AppTheme.adaptiveCardBackground(colorScheme))
                     }
@@ -391,9 +304,118 @@ struct DrillDownListView: View {
         }
     }
 
-    private func filterChip(_ type: MediaType?, label: String) -> some View {
+
+}
+
+private struct StatCategoryRow: View {
+    let icon: String
+    let label: String
+    let color: Color
+    let watchedCount: Int
+    let queueCount: Int
+    let onWatched: () -> Void
+    let onQueue: () -> Void
+    let colorScheme: ColorScheme
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Category icon
+            Image(systemName: icon)
+                .font(.headline)
+                .foregroundStyle(color)
+                .frame(width: 36, height: 36)
+                .background(color.opacity(0.12))
+                .clipShape(Circle())
+
+            Text(label)
+                .font(.subheadline.weight(.semibold))
+
+            Spacer()
+
+            // Watched pill
+            Button(action: onWatched) {
+                HStack(spacing: 4) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.green)
+                    Text("\(watchedCount)")
+                        .font(.caption.weight(.bold))
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(.green.opacity(0.1))
+                .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+
+            // Queue pill
+            Button(action: onQueue) {
+                HStack(spacing: 4) {
+                    Image(systemName: "bookmark.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.orange)
+                    Text("\(queueCount)")
+                        .font(.caption.weight(.bold))
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(.orange.opacity(0.1))
+                .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(14)
+        .background(AppTheme.adaptiveCardBackground(colorScheme))
+        .clipShape(Squircle(cornerRadius: 14))
+    }
+}
+
+private struct StatRecentCard: View {
+    let item: MediaItem
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ZStack {
+                LinearGradient(
+                    colors: [item.accentColor.opacity(0.4), item.accentColor.opacity(0.15)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+
+                WebImage(url: item.posterURL) { image in
+                    image.resizable().aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    if item.posterURL == nil {
+                        Image(systemName: item.type.icon)
+                            .font(.title2)
+                            .foregroundStyle(item.accentColor.opacity(0.6))
+                    } else {
+                        ShimmerView()
+                    }
+                }
+                .transition(.fade(duration: 0.2))
+                .id(item.posterURL)
+                .allowsHitTesting(false)
+            }
+            .frame(width: 110, height: 160)
+            .clipShape(Squircle(cornerRadius: 10))
+
+            Text(item.title)
+                .font(.caption.weight(.medium))
+                .lineLimit(1)
+                .frame(width: 110, alignment: .leading)
+        }
+    }
+}
+
+private struct StatFilterChip: View {
+    let type: MediaType?
+    let label: String
+    @Binding var filterType: MediaType?
+
+    var body: some View {
         let isSelected = filterType == type
-        return Button {
+        Button {
             withAnimation(.snappy) { filterType = type }
         } label: {
             Text(label)
@@ -407,8 +429,13 @@ struct DrillDownListView: View {
         }
         .buttonStyle(.plain)
     }
+}
 
-    private func drillDownRow(_ item: MediaItem) -> some View {
+private struct StatDrillDownRow: View {
+    let item: MediaItem
+    @Environment(SettingsManager.self) private var settings
+
+    var body: some View {
         HStack(spacing: 12) {
             // Poster
             ZStack {

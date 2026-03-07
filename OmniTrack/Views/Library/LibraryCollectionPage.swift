@@ -47,15 +47,7 @@ struct LibraryCollectionRoute: Hashable {
     }
 }
 
-private func libraryBackgroundGradient(_ colorScheme: ColorScheme) -> LinearGradient {
-    LinearGradient(
-        colors: colorScheme == .dark
-        ? [Color(hex: "04101F"), Color(hex: "01050C")]
-        : [Color(hex: "EFF4FA"), Color(hex: "E5ECF5")],
-        startPoint: .top,
-        endPoint: .bottom
-    )
-}
+
 
 struct LibraryCollectionPage: View {
     @Environment(MediaService.self) private var mediaService
@@ -101,13 +93,13 @@ struct LibraryCollectionPage: View {
                     } else if route.kind == .watchlist {
                         LazyVStack(spacing: 12) {
                             ForEach(items) { item in
-                                watchlistRow(item)
+                                LibraryWatchlistRow(item: item, selectedItem: $selectedItem)
                             }
                         }
                     } else {
                         LazyVGrid(columns: gridColumns, spacing: 12) {
                             ForEach(items) { item in
-                                watchedPoster(item)
+                                LibraryWatchedPoster(item: item, selectedItem: $selectedItem)
                             }
                         }
                     }
@@ -121,7 +113,7 @@ struct LibraryCollectionPage: View {
         .navigationBarBackButtonHidden(true)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                circleToolbarButton(symbol: "chevron.left") {
+                LibraryCircleToolbarButton(symbol: "chevron.left") {
                     dismiss()
                 }
             }
@@ -137,8 +129,8 @@ struct LibraryCollectionPage: View {
             }
 
             ToolbarItemGroup(placement: .topBarTrailing) {
-                circleToolbarButton(symbol: "shuffle") {}
-                circleToolbarButton(symbol: "ellipsis") {}
+                LibraryCircleToolbarButton(symbol: "shuffle") {}
+                LibraryCircleToolbarButton(symbol: "ellipsis") {}
             }
         }
         .sheet(item: $selectedItem) { item in
@@ -146,7 +138,34 @@ struct LibraryCollectionPage: View {
         }
     }
 
-    private func watchlistRow(_ item: MediaItem) -> some View {
+
+
+    private func descriptionText(for item: MediaItem) -> String {
+        let trimmedOverview = item.overview.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedOverview.isEmpty {
+            return trimmedOverview
+        }
+        return item.subtitle
+    }
+
+    private func formattedReleaseDate(for item: MediaItem) -> String {
+        if let raw = item.releaseDateString,
+           let date = DateFormatter.libraryDateParser.date(from: raw) {
+            return DateFormatter.libraryReleaseFormatter.string(from: date)
+        }
+        if item.year > 0 {
+            return String(item.year)
+        }
+        return "Release date unavailable"
+    }
+}
+
+private struct LibraryWatchlistRow: View {
+    let item: MediaItem
+    @Binding var selectedItem: MediaItem?
+    @Environment(SettingsManager.self) private var settings
+
+    var body: some View {
         Button {
             selectedItem = item
         } label: {
@@ -179,17 +198,6 @@ struct LibraryCollectionPage: View {
         .buttonStyle(.plain)
     }
 
-    private func watchedPoster(_ item: MediaItem) -> some View {
-        Button {
-            selectedItem = item
-        } label: {
-            PosterCard(item: item, cornerRadius: 18)
-                .frame(maxWidth: .infinity)
-                .aspectRatio(0.68, contentMode: .fit)
-        }
-        .buttonStyle(.plain)
-    }
-
     private func descriptionText(for item: MediaItem) -> String {
         let trimmedOverview = item.overview.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedOverview.isEmpty {
@@ -208,8 +216,29 @@ struct LibraryCollectionPage: View {
         }
         return "Release date unavailable"
     }
+}
 
-    private func circleToolbarButton(symbol: String, action: @escaping () -> Void) -> some View {
+private struct LibraryWatchedPoster: View {
+    let item: MediaItem
+    @Binding var selectedItem: MediaItem?
+
+    var body: some View {
+        Button {
+            selectedItem = item
+        } label: {
+            PosterCard(item: item, cornerRadius: 18)
+                .frame(maxWidth: .infinity)
+                .aspectRatio(0.68, contentMode: .fit)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct LibraryCircleToolbarButton: View {
+    let symbol: String
+    let action: () -> Void
+
+    var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
         }

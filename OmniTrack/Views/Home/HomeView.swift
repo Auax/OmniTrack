@@ -60,7 +60,7 @@ struct HomeView: View {
                     if (mediaService.isLoading || shouldShowInitialLoading) && mediaService.allMedia.isEmpty {
                         loadingView
                     } else if let error = mediaService.errorMessage, mediaService.allMedia.isEmpty {
-                        errorView(error)
+                        HomeErrorView(message: error, reloadAction: reloadContent)
                     } else {
                         if !continueWatchingItems.isEmpty {
                             carouselSection(
@@ -128,7 +128,7 @@ struct HomeView: View {
         emptyAction: (() -> Void)? = nil
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionHeader(title)
+            HomeSectionHeader(title: title)
                 .padding(.horizontal, 16)
 
             if items.isEmpty {
@@ -162,12 +162,12 @@ struct HomeView: View {
                         HStack(spacing: 14) {
                             ForEach(items.prefix(12)) { item in
                                 if showsContinueActions && item.hasSeasonsAndEpisodes {
-                                    continueWatchingCard(item, cardWidth: cardWidth)
+                                    HomeContinueWatchingCard(item: item, cardWidth: cardWidth, selectedItem: $selectedItem)
                                 } else {
                                     Button {
                                         selectedItem = item
                                     } label: {
-                                        homeGlassCard(
+                                        HomeGlassCard(
                                             item: item,
                                             cardWidth: cardWidth,
                                             subtitle: item.subtitle
@@ -187,19 +187,71 @@ struct HomeView: View {
         }
     }
 
-    private func continueWatchingCard(_ item: MediaItem, cardWidth: CGFloat) -> some View {
-        let nextKey = EpisodeProgress.nextEpisodeKey(
+
+
+
+
+    private var emptyWatchlistView: some View {
+        ContentUnavailableView {
+            Label("Nothing here yet", systemImage: "sparkles")
+        } description: {
+            Text("Your watchlist is feeling a bit lonely.\nExplore new titles to get started!")
+        } actions: {
+            Button("Explore") {
+                onExplore()
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(colorScheme == .dark ? .white : .black)
+            .foregroundStyle(colorScheme == .dark ? .black : .white)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 20)
+    }
+
+    private var loadingView: some View {
+        VStack(spacing: 16) {
+            ProgressView()
+                .controlSize(.large)
+            Text("Loading...")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 80)
+    }
+
+
+
+    private func reloadContent() {
+        Task {
+            await mediaService.loadContent(
+                showMovies: settings.showMovies,
+                showTVShows: settings.showTVShows,
+                showAnime: settings.showAnime
+            )
+        }
+    }
+}
+
+private struct HomeContinueWatchingCard: View {
+    let item: MediaItem
+    let cardWidth: CGFloat
+    @Binding var selectedItem: MediaItem?
+    @Environment(MediaService.self) private var mediaService
+
+    var body: some View {
+        let nextKey = MediaProgressResolver.nextEpisodeKey(
             watchedKeys: mediaService.watchedEpisodeKeys(mediaId: item.id),
             totalEpisodes: item.totalEpisodes,
             isWatched: item.isWatched
         )
-        let label = EpisodeProgress.displayLabel(for: nextKey, style: .home)
+        let label = MediaProgressResolver.displayLabel(for: nextKey, style: .home)
 
-        return VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 8) {
             Button {
                 selectedItem = item
             } label: {
-                homeGlassCard(item: item, cardWidth: cardWidth, subtitle: label)
+                HomeGlassCard(item: item, cardWidth: cardWidth, subtitle: label)
             }
             .buttonStyle(.plain)
 
@@ -228,8 +280,15 @@ struct HomeView: View {
         }
         .frame(width: cardWidth, alignment: .leading)
     }
+}
 
-    private func homeGlassCard(item: MediaItem, cardWidth: CGFloat, subtitle: String?) -> some View {
+private struct HomeGlassCard: View {
+    let item: MediaItem
+    let cardWidth: CGFloat
+    let subtitle: String?
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
         ZStack(alignment: .bottomLeading) {
             WebImage(url: item.backdropURL ?? item.posterURL) { image in
                 image
@@ -288,64 +347,34 @@ struct HomeView: View {
                 .stroke(.white.opacity(colorScheme == .dark ? 0.16 : 0.25), lineWidth: 1)
         )
     }
+}
 
-    private var emptyWatchlistView: some View {
-        ContentUnavailableView {
-            Label("Nothing here yet", systemImage: "sparkles")
-        } description: {
-            Text("Your watchlist is feeling a bit lonely.\nExplore new titles to get started!")
-        } actions: {
-            Button("Explore") {
-                onExplore()
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(colorScheme == .dark ? .white : .black)
-            .foregroundStyle(colorScheme == .dark ? .black : .white)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 20)
-    }
+private struct HomeErrorView: View {
+    let message: String
+    let reloadAction: () -> Void
 
-    private var loadingView: some View {
-        VStack(spacing: 16) {
-            ProgressView()
-                .controlSize(.large)
-            Text("Loading...")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 80)
-    }
-
-    private func errorView(_ message: String) -> some View {
+    var body: some View {
         ContentUnavailableView {
             Label("Unable to Load", systemImage: "wifi.exclamationmark")
         } description: {
             Text(message)
         } actions: {
             Button("Try Again") {
-                reloadContent()
+                reloadAction()
             }
         }
         .padding(.top, 40)
     }
+}
 
-    private func sectionHeader(_ title: String) -> some View {
+private struct HomeSectionHeader: View {
+    let title: String
+
+    var body: some View {
         HStack {
             Text(title)
                 .font(.title3.weight(.semibold))
             Spacer()
-        }
-    }
-
-    private func reloadContent() {
-        Task {
-            await mediaService.loadContent(
-                showMovies: settings.showMovies,
-                showTVShows: settings.showTVShows,
-                showAnime: settings.showAnime
-            )
         }
     }
 }

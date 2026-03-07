@@ -6,38 +6,7 @@ struct DiscoverView: View {
     @Environment(SettingsManager.self) private var settings
     @Environment(\.colorScheme) private var colorScheme
 
-    @State private var searchText: String = ""
-    @State private var searchTask: Task<Void, Never>?
-
-    @State private var selectedType: MediaType? = nil
-    @State private var selectedCatalog: DiscoverCatalog = .popular
-    @State private var selectedGenre: String? = nil
-    @State private var selectedItem: MediaItem?
-
-    private var isSearchingQuery: Bool {
-        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    var availableGenres: [String] {
-        mediaService.discoverGenreNames(includeAniListGenres: settings.animeSource == .aniList)
-    }
-
-    private var trendingPreviewItems: [MediaItem] {
-        Array(mediaService.discoverMedia.prefix(8))
-    }
-
-    private var gridItems: [MediaItem] {
-        if isSearchingQuery {
-            return mediaService.discoverMedia
-        }
-
-        let remainder = Array(mediaService.discoverMedia.dropFirst(trendingPreviewItems.count))
-        return remainder.isEmpty ? mediaService.discoverMedia : remainder
-    }
-
-    private var spotlightTitle: String {
-        selectedCatalog == .new ? "New Releases" : "Trending Now"
-    }
+    @State private var viewModel = DiscoverViewModel()
 
     var body: some View {
         NavigationStack {
@@ -50,42 +19,35 @@ struct DiscoverView: View {
             .background(AppTheme.adaptiveBackground(colorScheme))
             .navigationTitle("Discover")
             .searchable(
-                text: $searchText,
+                text: $viewModel.searchText,
                 placement: .navigationBarDrawer(displayMode: .always),
                 prompt: "Search any movie, show or anime..."
             )
-            .sheet(item: $selectedItem) { item in
+            .sheet(item: $viewModel.selectedItem) { item in
                 DetailView(item: item)
             }
             .task {
+                viewModel.setupSearchDebounce(mediaService: mediaService)
                 if mediaService.discoverMedia.isEmpty {
-                    loadData(reset: true)
+                    viewModel.loadData(reset: true, mediaService: mediaService)
                 }
             }
-            .onChange(of: selectedType) { _, _ in loadData(reset: true) }
-            .onChange(of: selectedCatalog) { _, _ in loadData(reset: true) }
-            .onChange(of: selectedGenre) { _, _ in loadData(reset: true) }
+            .onChange(of: viewModel.selectedType) { _, _ in viewModel.loadData(reset: true, mediaService: mediaService) }
+            .onChange(of: viewModel.selectedCatalog) { _, _ in viewModel.loadData(reset: true, mediaService: mediaService) }
+            .onChange(of: viewModel.selectedGenre) { _, _ in viewModel.loadData(reset: true, mediaService: mediaService) }
             .onChange(of: settings.animeSource) { _, _ in
-                selectedGenre = nil
-                loadData(reset: true)
+                viewModel.selectedGenre = nil
+                viewModel.loadData(reset: true, mediaService: mediaService)
             }
             .onChange(of: settings.animeTitlePreference) { _, _ in
-                loadData(reset: true)
-            }
-            .onChange(of: searchText) { _, _ in
-                searchTask?.cancel()
-                searchTask = Task {
-                    try? await Task.sleep(nanoseconds: 400_000_000)
-                    guard !Task.isCancelled else { return }
-                    loadData(reset: true)
-                }
+                viewModel.loadData(reset: true, mediaService: mediaService)
             }
         }
     }
 
     private var discoverControls: some View {
         VStack(spacing: 12) {
-            Picker("Media Category", selection: $selectedType) {
+            Picker("Media Category", selection: $viewModel.selectedType) {
                 Text("All").tag(nil as MediaType?)
                 Text("Movies").tag(Optional(MediaType.movie))
                 Text("TV Shows").tag(Optional(MediaType.tvShow))
@@ -96,17 +58,17 @@ struct DiscoverView: View {
             HStack(spacing: 10) {
                 Menu {
                     Button("All Genres") {
-                        selectedGenre = nil
+                        viewModel.selectedGenre = nil
                     }
 
-                    ForEach(availableGenres, id: \.self) { genre in
+                    ForEach(viewModel.availableGenres(mediaService: mediaService, settings: settings), id: \.self) { genre in
                         Button(genre) {
-                            selectedGenre = genre
+                            viewModel.selectedGenre = genre
                         }
                     }
                 } label: {
-                    dropdownLabel(
-                        title: selectedGenre ?? "Genre",
+                    DiscoverDropdownLabel(
+                        title: viewModel.selectedGenre ?? "Genre",
                         icon: "tag"
                     )
                 }
@@ -116,12 +78,12 @@ struct DiscoverView: View {
                 Menu {
                     ForEach(DiscoverCatalog.allCases) { catalog in
                         Button(catalog.rawValue) {
-                            selectedCatalog = catalog
+                            viewModel.selectedCatalog = catalog
                         }
                     }
                 } label: {
-                    dropdownLabel(
-                        title: "Sort By: \(selectedCatalog.rawValue)",
+                    DiscoverDropdownLabel(
+                        title: "Sort By: \(viewModel.selectedCatalog.rawValue)",
                         icon: "arrow.up.arrow.down"
                     )
                 }
@@ -133,29 +95,7 @@ struct DiscoverView: View {
         .padding(.bottom, 20)
     }
 
-    private func dropdownLabel(title: String, icon: String) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.secondary)
 
-            Text(title)
-                .font(.footnote.weight(.medium))
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
-
-            Spacer(minLength: 0)
-
-            Image(systemName: "chevron.down")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.secondary)
-        }
-        .foregroundStyle(.primary)
-        .padding(.horizontal, 12)
-        .frame(maxWidth: .infinity, minHeight: 32, maxHeight: 32)
-        .background(Color(uiColor: .tertiarySystemFill), in: RoundedRectangle(cornerRadius: 32, style: .continuous))
-
-    }
 
     @ViewBuilder
     private var discoverContent: some View {
@@ -170,18 +110,18 @@ struct DiscoverView: View {
                 .padding(.bottom, 20)
         } else {
             VStack(alignment: .leading, spacing: 0) {
-                if !isSearchingQuery {
+                if !viewModel.isSearchingQuery {
                     trendingSection
                 }
 
-                sectionHeader(isSearchingQuery ? "Results" : "Browse Catalog")
+                DiscoverSectionHeader(title: viewModel.isSearchingQuery ? "Results" : "Browse Catalog")
                     .padding(.horizontal, 16)
                     .padding(.bottom, 8)
 
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
-                    ForEach(gridItems) { item in
+                    ForEach(viewModel.gridItems(mediaService: mediaService)) { item in
                         Button {
-                            selectedItem = item
+                            viewModel.selectedItem = item
                         } label: {
                             DiscoverPosterCard(item: item)
                         }
@@ -192,7 +132,7 @@ struct DiscoverView: View {
                         Color.clear
                             .frame(height: 50)
                             .onAppear {
-                                loadMore()
+                                viewModel.loadMore(mediaService: mediaService)
                             }
                     }
                 }
@@ -204,9 +144,10 @@ struct DiscoverView: View {
 
     @ViewBuilder
     private var trendingSection: some View {
+        let trendingPreviewItems = viewModel.trendingPreviewItems(mediaService: mediaService)
         if !trendingPreviewItems.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
-                sectionHeader(spotlightTitle)
+                DiscoverSectionHeader(title: viewModel.spotlightTitle)
                     .padding(.horizontal, 16)
 
                 GeometryReader { proxy in
@@ -216,7 +157,7 @@ struct DiscoverView: View {
                         HStack(spacing: 14) {
                             ForEach(trendingPreviewItems) { item in
                                 Button {
-                                    selectedItem = item
+                                    viewModel.selectedItem = item
                                 } label: {
                                     FeaturedCardView(item: item)
                                         .frame(width: cardWidth)
@@ -239,39 +180,7 @@ struct DiscoverView: View {
         }
     }
 
-    private func sectionHeader(_ title: String) -> some View {
-        HStack {
-            Text(title)
-                .font(.title3.weight(.semibold))
-            Spacer()
-        }
-    }
 
-    private func loadData(reset: Bool) {
-        Task {
-            let genreId = selectedGenre.flatMap { mediaService.genreIdForName($0) }
-            await mediaService.loadDiscover(
-                reset: reset,
-                type: selectedType,
-                catalog: selectedCatalog,
-                genreId: genreId,
-                query: searchText
-            )
-        }
-    }
-
-    private func loadMore() {
-        Task {
-            let genreId = selectedGenre.flatMap { mediaService.genreIdForName($0) }
-            await mediaService.loadDiscover(
-                reset: false,
-                type: selectedType,
-                catalog: selectedCatalog,
-                genreId: genreId,
-                query: searchText
-            )
-        }
-    }
 }
 
 // MARK: - DiscoverPosterCard
@@ -330,5 +239,45 @@ struct DiscoverPosterCard: View {
                 .stroke(.white.opacity(colorScheme == .dark ? 0.16 : 0.24), lineWidth: 1)
         )
         .shadow(color: .black.opacity(colorScheme == .dark ? 0.3 : 0.1), radius: 5, y: 3)
+    }
+}
+
+private struct DiscoverDropdownLabel: View {
+    let title: String
+    let icon: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            Text(title)
+                .font(.footnote.weight(.medium))
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "chevron.down")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+        .foregroundStyle(.primary)
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, minHeight: 32, maxHeight: 32)
+        .background(Color(uiColor: .tertiarySystemFill), in: RoundedRectangle(cornerRadius: 32, style: .continuous))
+    }
+}
+
+private struct DiscoverSectionHeader: View {
+    let title: String
+
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(.title3.weight(.semibold))
+            Spacer()
+        }
     }
 }
